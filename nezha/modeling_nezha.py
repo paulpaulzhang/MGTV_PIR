@@ -1192,6 +1192,7 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
             head_mask=None,
             inputs_embeds=None,
             labels=None,
+            **kargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1259,7 +1260,7 @@ class NeZhaForSequenceClassification(NeZhaPreTrainedModel):
         #         loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
         #     outputs = (loss,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return logits  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
