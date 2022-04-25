@@ -6,17 +6,18 @@ from collections import Counter
 import gc
 import math
 from ark_nlp.dataset.base._sentence_classification_dataset import SentenceClassificationDataset
-from transformers import BertConfig
+from ark_nlp.factory.loss_function.focal_loss import FocalLoss
+from transformers import BertConfig, XLNetConfig
 from ark_nlp.processor.tokenizer.transfomer import SentenceTokenizer
 from nezha.configuration_nezha import NeZhaConfig
 from nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassification
 from tokenizer import BertTokenizer
 from utils import WarmupLinearSchedule, seed_everything, get_default_bert_optimizer
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
-from model import SequenceClassificationModel
+from model import BertForSequenceClassification, XLNetForSequenceClassification
 import pandas as pd
 import torch
 import os
@@ -26,13 +27,13 @@ import warnings
 def build_model_and_tokenizer(args, num_labels, is_train=True):
     tokenizer = SentenceTokenizer(vocab=args.model_name_or_path,
                                   max_seq_len=args.max_seq_len)
-    config = BertConfig.from_pretrained(args.model_name_or_path,
+    config = XLNetConfig.from_pretrained(args.model_name_or_path,
                                         num_labels=num_labels)
     if is_train:
-        dl_module = SequenceClassificationModel.from_pretrained(args.model_name_or_path,
+        dl_module = XLNetForSequenceClassification.from_pretrained(args.model_name_or_path,
                                                                 config=config)
     else:
-        dl_module = SequenceClassificationModel(
+        dl_module = XLNetForSequenceClassification(
             config=config)
     return tokenizer, dl_module
 
@@ -167,10 +168,10 @@ def train_cv(args):
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
-    kfold = KFold(n_splits=args.fold, shuffle=True, random_state=args.seed)
+    kfold = StratifiedKFold(n_splits=args.fold, shuffle=True, random_state=args.seed)
     args.checkpoint = os.path.join(args.checkpoint, args.model_type)
     model_type = args.model_type
-    for fold, (train_idx, dev_idx) in enumerate(kfold.split(data_df)):
+    for fold, (train_idx, dev_idx) in enumerate(kfold.split(data_df, data_df['label'])):
         print(f'========== {fold + 1} ==========')
 
         args.model_type = f'{model_type}-{fold + 1}'
@@ -367,7 +368,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', type=str,
                         default='bert-base')
     parser.add_argument('--model_name_or_path', type=str,
-                        default='../pretrain_model/uer_large/')
+                        default='../pretrain_model/chinese-xlnet-base/')
 
     parser.add_argument('--checkpoint', type=str,
                         default='./checkpoint')
@@ -387,7 +388,7 @@ if __name__ == '__main__':
     parser.add_argument('--do_merge', action='store_true', default=False)
     parser.add_argument('--predict_model', type=str)
 
-    parser.add_argument('--max_seq_len', type=int, default=64)
+    parser.add_argument('--max_seq_len', type=int, default=80)
 
     parser.add_argument('--lr', type=float, default=2e-5)
     parser.add_argument('--clf_lr', type=float, default=2e-4)

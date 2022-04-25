@@ -2,7 +2,7 @@ from ast import arg
 import os
 import warnings
 from ark_nlp.factory.task.base._sequence_classification import SequenceClassificationTask
-from ark_nlp.factory.utils.attack import FGM, PGD
+from utils import FGM, PGD
 from torch.utils.data import DataLoader
 from ark_nlp.factory.optimizer import get_optimizer
 import torch
