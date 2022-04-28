@@ -64,6 +64,7 @@ class Task(SequenceClassificationTask):
         logs.write(str(args) + '\n')
         logs.write(
             f"|{'epoch':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
+        early_stopping = 2
 
         for epoch in range(1, epochs+1):
 
@@ -126,6 +127,9 @@ class Task(SequenceClassificationTask):
                 logs.write(content)
 
                 if self.evaluate_logs['f1'] < self.best_f1:
+                    early_stopping -= 1
+
+                if early_stopping == 0:
                     break
 
         self._on_train_end(**kwargs)

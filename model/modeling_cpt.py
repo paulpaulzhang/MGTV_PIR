@@ -1274,7 +1274,7 @@ class CPTForSequenceClassification(CPTPretrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
-        )
+        ).logits
 
 
 @add_start_docstrings(
