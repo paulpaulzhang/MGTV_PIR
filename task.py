@@ -79,7 +79,7 @@ class Task(SequenceClassificationTask):
 
                 # input处理和设备转移
                 inputs = self._get_module_inputs_on_train(inputs, **kwargs)
-
+                print(inputs)
                 outputs = self.module(**inputs)
                 logits, loss = self._get_train_loss(inputs, outputs, **kwargs)
 
@@ -92,11 +92,12 @@ class Task(SequenceClassificationTask):
                     # optimize
                     self._on_optimize(inputs, outputs, logits, loss, **kwargs)
 
+                    train_iterator.set_postfix_str(
+                        f"training loss: {(self.logs['epoch_loss'] / self.logs['epoch_step']):.4f}")
+
                 # setp evaluate
                 self._on_step_end(step, inputs, outputs,
                                   loss, verbose=False, **kwargs)
-                train_iterator.set_postfix_str(
-                    f"training loss: {(self.logs['epoch_loss'] / self.logs['epoch_step']):.4f}")
 
             self._on_epoch_end(epoch, verbose=False, **kwargs)
 

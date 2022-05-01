@@ -9,15 +9,17 @@ from ark_nlp.dataset.base._sentence_classification_dataset import SentenceClassi
 from ark_nlp.factory.loss_function.focal_loss import FocalLoss
 from transformers import BertConfig, BertModel
 from ark_nlp.processor.tokenizer.transfomer import SentenceTokenizer
+from zmq import device
 from model.nezha.configuration_nezha import NeZhaConfig
 from model.nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassification
-from tokenizer import BertTokenizer
+from tokenizer import BertSpanTokenizer
 from utils import WarmupLinearSchedule, seed_everything, get_default_bert_optimizer
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
 from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification
+from data import text_enchance
 import pandas as pd
 import torch
 import os
@@ -25,17 +27,17 @@ import warnings
 
 
 def build_model_and_tokenizer(args, num_labels, is_train=True):
-    tokenizer = SentenceTokenizer(vocab=args.model_name_or_path,
-                                  max_seq_len=args.max_seq_len)
+    tokenizer = BertSpanTokenizer(vocab=args.model_name_or_path,
+                              max_seq_len=args.max_seq_len)
     config = BertConfig.from_pretrained(args.model_name_or_path,
-                                        num_labels=num_labels)
+                                         num_labels=num_labels)
     if is_train:
         bert = BertModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertForSequenceClassification(config, bert)
     else:
         bert = BertModel(config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 
@@ -44,6 +46,12 @@ def train(args):
     goods_df = pd.read_csv(args.goods_data_path)
     train_data_df = pd.concat([train_data_df, goods_df])
     train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
+
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+
     train_data_df, dev_data_df = train_test_split(
         train_data_df, test_size=0.1, shuffle=True, random_state=args.seed)
 
@@ -82,7 +90,8 @@ def train(args):
               epochs=args.num_epochs,
               batch_size=args.batch_size,
               num_workers=args.num_workers,
-              save_each_model=False)
+              save_each_model=False,
+              gradient_accumulation_steps=args.gradient_accumulation_steps)
 
 
 def evaluate(args):
@@ -92,6 +101,11 @@ def evaluate(args):
     train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
     train_data_df, dev_data_df = train_test_split(
         train_data_df, test_size=0.1, shuffle=True, random_state=args.seed)
+
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
 
     train_dataset = SentenceClassificationDataset(
         train_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -125,6 +139,14 @@ def predict(args):
     test_data_df = pd.read_csv(args.test_file)
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
+
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+    test_data_df['text'] = test_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -160,6 +182,8 @@ def predict(args):
 
     os.makedirs(args.save_path, exist_ok=True)
     test_data_df['label'] = [test_dataset.id2cat[label] for label in y_pred]
+    test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+    test_data_df['label'] = test_data_df['label'].astype('int')
     test_data_df.to_csv(f'{args.save_path}/results.csv', index=None)
 
 
@@ -169,13 +193,15 @@ def train_cv(args):
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
+    data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
+    data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
+
     kfold = StratifiedKFold(
         n_splits=args.fold, shuffle=True, random_state=args.seed)
     args.checkpoint = os.path.join(args.checkpoint, args.model_type)
     model_type = args.model_type
     for fold, (train_idx, dev_idx) in enumerate(kfold.split(data_df, data_df['label'])):
         print(f'========== {fold + 1} ==========')
-
         args.model_type = f'{model_type}-{fold + 1}'
 
         train_data_df, dev_data_df = data_df.iloc[train_idx], data_df.iloc[dev_idx]
@@ -206,7 +232,7 @@ def train_cv(args):
             dl_module, optimizer, 'lsce',
             scheduler=scheduler,
             ema_decay=args.ema_decay,
-            cuda_device=args.cuda_device)
+            device=args.device)
 
         model.fit(args,
                   train_dataset,
@@ -214,20 +240,29 @@ def train_cv(args):
                   epochs=args.num_epochs,
                   batch_size=args.batch_size,
                   num_workers=args.num_workers,
-                  save_each_model=False)
+                  save_each_model=False,
+                  gradient_accumulation_steps=args.gradient_accumulation_steps)
 
         del model, tokenizer, dl_module, optimizer, scheduler
         gc.collect()
         torch.cuda.empty_cache()
 
 
-def predict_cv(args):
+def predict_vote(args):
     train_data_df = pd.read_csv(args.data_path)
     train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
 
     test_data_df = pd.read_csv(args.test_file)
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
+
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+    test_data_df['text'] = test_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -278,17 +313,27 @@ def predict_cv(args):
         os.makedirs(args.save_path, exist_ok=True)
         test_data_df['label'] = [test_dataset.id2cat[label]
                                  for label in y_pred]
+        test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+        test_data_df['label'] = test_data_df['label'].astype('int')
         test_data_df.to_csv(os.path.join(
             args.save_path, f'{model_type}-{fold + 1}.csv'), index=None)
 
 
-def predict_cv_merge(args):
+def predict_merge(args):
     train_data_df = pd.read_csv(args.data_path)
     train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
 
     test_data_df = pd.read_csv(args.test_file)
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
+
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+    test_data_df['text'] = test_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -341,12 +386,14 @@ def predict_cv_merge(args):
 
     test_data_df['label'] = [test_dataset.id2cat[id_]
                              for id_ in np.argmax(y_preds, axis=1)]
+    test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+    test_data_df['label'] = test_data_df['label'].astype('int')
     test_data_df.to_csv(os.path.join(
         args.save_path, f'results.csv'), index=None)
 
 
-def merge_cv_result(args):
-    path = [str(p) for p in list(Path(args.merge_path).glob('**/*.csv'))]
+def vote(args):
+    path = [str(p) for p in list(Path(args.vote_path).glob('**/*.csv'))]
     all_labels = []
 
     out_df = pd.read_csv(path[0])
@@ -368,9 +415,9 @@ if __name__ == '__main__':
     parser = ArgumentParser()
 
     parser.add_argument('--model_type', type=str,
-                        default='bert-base')
+                        default='bert_base')
     parser.add_argument('--model_name_or_path', type=str,
-                        default='../pretrain_model/uer_large/')
+                        default='../pretrain_model/chinese-bert-wwm/')
 
     parser.add_argument('--checkpoint', type=str,
                         default='./checkpoint')
@@ -385,19 +432,21 @@ if __name__ == '__main__':
     parser.add_argument('--do_predict', action='store_true', default=False)
     parser.add_argument('--do_eval', action='store_true', default=False)
     parser.add_argument('--do_train_cv', action='store_true', default=False)
-    parser.add_argument('--do_predict_cv', action='store_true', default=False)
-    parser.add_argument('--do_predict_cv_merge',
+    parser.add_argument('--do_predict_vote',
                         action='store_true', default=False)
-    parser.add_argument('--do_merge', action='store_true', default=False)
+    parser.add_argument('--do_predict_merge',
+                        action='store_true', default=False)
+    parser.add_argument('--do_vote', action='store_true', default=False)
     parser.add_argument('--predict_model', type=str)
 
-    parser.add_argument('--max_seq_len', type=int, default=72)
+    parser.add_argument('--max_seq_len', type=int, default=64)
 
     parser.add_argument('--lr', type=float, default=2e-5)
     parser.add_argument('--clf_lr', type=float, default=2e-4)
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_workers', type=int, default=0)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
 
     parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)
@@ -412,10 +461,10 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, default=10)
     parser.add_argument('--extend_save_path', type=str,
                         default='./extend_data/')
-    parser.add_argument('--merge_path', type=str,
+    parser.add_argument('--vote_path', type=str,
                         default='./submit/')
 
-    parser.add_argument('--cuda_device', type=int, default=0)
+    parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=42)
 
     args = parser.parse_args()
@@ -432,11 +481,11 @@ if __name__ == '__main__':
         evaluate(args)
     elif args.do_train_cv:
         train_cv(args)
-    elif args.do_predict_cv:
-        predict_cv(args)
-    elif args.do_predict_cv_merge:
-        predict_cv_merge(args)
-    elif args.do_merge:
-        merge_cv_result(args)
+    elif args.do_predict_vote:
+        predict_vote(args)
+    elif args.do_predict_merge:
+        predict_merge(args)
+    elif args.do_vote:
+        vote(args)
     else:
         train(args)

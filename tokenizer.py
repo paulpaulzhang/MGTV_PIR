@@ -171,7 +171,7 @@ class TransfomerTokenizer(BaseTokenizer):
 
         return (sequence, sequence_mask, segment_ids)
 
-class BertTokenizer(TransfomerTokenizer):
+class BertSpanTokenizer(TransfomerTokenizer):
     """
     Transfomer文本编码器，用于对文本（基于分隔符分割维度）进行分词、ID化、填充等操作
 
@@ -192,7 +192,7 @@ class BertTokenizer(TransfomerTokenizer):
         split_token=' ',
         additional_special_split_token='[unused1]'
     ):
-        super(BertTokenizer, self).__init__(vocab, max_seq_len)
+        super(BertSpanTokenizer, self).__init__(vocab, max_seq_len)
         self.split_token = split_token
         if additional_special_split_token is None:
             self.additional_special_split_token = self.split_token
