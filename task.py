@@ -79,7 +79,7 @@ class Task(SequenceClassificationTask):
 
                 # input处理和设备转移
                 inputs = self._get_module_inputs_on_train(inputs, **kwargs)
-                print(inputs)
+                
                 outputs = self.module(**inputs)
                 logits, loss = self._get_train_loss(inputs, outputs, **kwargs)
 

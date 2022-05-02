@@ -29,8 +29,8 @@ class BertForSequenceClassification(nn.Module):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=False,
-            output_hidden_states=True,
+         #   output_attentions=False,
+         #   output_hidden_states=True,
         )
 
         # pooled_output = outputs[1]

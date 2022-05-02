@@ -190,7 +190,7 @@ class BertSpanTokenizer(TransfomerTokenizer):
         vocab,
         max_seq_len,
         split_token=' ',
-        additional_special_split_token='[unused1]'
+        additional_special_split_token='[unused66]'
     ):
         super(BertSpanTokenizer, self).__init__(vocab, max_seq_len)
         self.split_token = split_token

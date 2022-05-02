@@ -1,7 +1,6 @@
 from pathlib import Path
 import numpy as np
 from torch.utils.data import DataLoader
-from ast import arg
 from collections import Counter
 import gc
 import math
@@ -9,7 +8,6 @@ from ark_nlp.dataset.base._sentence_classification_dataset import SentenceClassi
 from ark_nlp.factory.loss_function.focal_loss import FocalLoss
 from transformers import BertConfig, BertModel
 from ark_nlp.processor.tokenizer.transfomer import SentenceTokenizer
-from zmq import device
 from model.nezha.configuration_nezha import NeZhaConfig
 from model.nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassification
 from tokenizer import BertSpanTokenizer
@@ -19,7 +17,7 @@ from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
 from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification
-from data import text_enchance
+from data_process import text_enchance
 import pandas as pd
 import torch
 import os
@@ -29,14 +27,14 @@ import warnings
 def build_model_and_tokenizer(args, num_labels, is_train=True):
     tokenizer = BertSpanTokenizer(vocab=args.model_name_or_path,
                               max_seq_len=args.max_seq_len)
-    config = BertConfig.from_pretrained(args.model_name_or_path,
+    config = NeZhaConfig.from_pretrained(args.model_name_or_path,
                                          num_labels=num_labels)
     if is_train:
-        bert = BertModel.from_pretrained(
+        bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
         dl_module = BertForSequenceClassification(config, bert)
     else:
-        bert = BertModel(config=config)
+        bert = NeZhaModel(config=config)
         dl_module = BertForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
@@ -154,7 +152,7 @@ def predict(args):
     tokenizer, model = build_model_and_tokenizer(
         args, len(test_dataset.cat2id), is_train=False)
     model.load_state_dict(torch.load(args.predict_model))
-    model.to(torch.device(f'cuda:{args.cuda_device}'))
+    model.to(torch.device(args.device))
 
     test_dataset.convert_to_ids(tokenizer)
 
@@ -190,6 +188,7 @@ def predict(args):
 def train_cv(args):
     data_df = pd.read_csv(args.data_path)
     goods_df = pd.read_csv(args.goods_data_path)
+   # extend_df = pd.read_csv('../data/a_dataset/extend_data.csv')
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
@@ -292,7 +291,7 @@ def predict_vote(args):
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
         model.load_state_dict(torch.load(args.predict_model))
-        model.to(torch.device(f'cuda:{args.cuda_device}'))
+        model.to(torch.device(args.device))
 
         y_pred = []
 
@@ -364,20 +363,20 @@ def predict_merge(args):
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
         model.load_state_dict(torch.load(args.predict_model))
-        model.to(torch.device(f'cuda:{args.cuda_device}'))
+        model.to(torch.device(args.device))
 
         y_pred = []
 
         with torch.no_grad():
             for inputs in tqdm(test_generator):
                 inputs['input_ids'] = inputs['input_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['attention_mask'] = inputs['attention_mask'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['token_type_ids'] = inputs['token_type_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['label_ids'] = inputs['label_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
 
                 outputs = model(**inputs)
                 y_pred.append(outputs.cpu().numpy())
