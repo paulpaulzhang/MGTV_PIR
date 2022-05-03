@@ -77,7 +77,7 @@ def train(args):
     torch.cuda.empty_cache()
 
     model = Task(
-        dl_module, optimizer, 'lsce',
+        dl_module, optimizer, 'ce',
         scheduler=scheduler,
         ema_decay=args.ema_decay,
         cuda_device=args.cuda_device)
@@ -192,8 +192,8 @@ def train_cv(args):
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
-    data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
-    data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
+    # data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
+    # data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
 
     kfold = StratifiedKFold(
         n_splits=args.fold, shuffle=True, random_state=args.seed)
@@ -228,7 +228,7 @@ def train_cv(args):
         torch.cuda.empty_cache()
 
         model = Task(
-            dl_module, optimizer, 'lsce',
+            dl_module, optimizer, 'ce',
             scheduler=scheduler,
             ema_decay=args.ema_decay,
             device=args.device)
@@ -255,13 +255,13 @@ def predict_vote(args):
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
 
-    train_data_df['text'] = train_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    train_data_df = train_data_df.drop(
-        train_data_df[(train_data_df['text'] == '')].index)
-    test_data_df['text'] = test_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
+    # train_data_df['text'] = train_data_df['text'].apply(
+    #     lambda x: text_enchance(x))
+    # train_data_df = train_data_df.drop(
+    #     train_data_df[(train_data_df['text'] == '')].index)
+    # test_data_df['text'] = test_data_df['text'].apply(
+    #     lambda x: text_enchance(x))
+    # test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -312,8 +312,8 @@ def predict_vote(args):
         os.makedirs(args.save_path, exist_ok=True)
         test_data_df['label'] = [test_dataset.id2cat[label]
                                  for label in y_pred]
-        test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
-        test_data_df['label'] = test_data_df['label'].astype('int')
+        # test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+        # test_data_df['label'] = test_data_df['label'].astype('int')
         test_data_df.to_csv(os.path.join(
             args.save_path, f'{model_type}-{fold + 1}.csv'), index=None)
 
@@ -326,13 +326,13 @@ def predict_merge(args):
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
 
-    train_data_df['text'] = train_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    train_data_df = train_data_df.drop(
-        train_data_df[(train_data_df['text'] == '')].index)
-    test_data_df['text'] = test_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
+    # train_data_df['text'] = train_data_df['text'].apply(
+    #     lambda x: text_enchance(x))
+    # train_data_df = train_data_df.drop(
+    #     train_data_df[(train_data_df['text'] == '')].index)
+    # test_data_df['text'] = test_data_df['text'].apply(
+    #     lambda x: text_enchance(x))
+    # test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -385,8 +385,8 @@ def predict_merge(args):
 
     test_data_df['label'] = [test_dataset.id2cat[id_]
                              for id_ in np.argmax(y_preds, axis=1)]
-    test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
-    test_data_df['label'] = test_data_df['label'].astype('int')
+    # test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+    # test_data_df['label'] = test_data_df['label'].astype('int')
     test_data_df.to_csv(os.path.join(
         args.save_path, f'results.csv'), index=None)
 
@@ -447,17 +447,17 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
 
-    parser.add_argument('--use_fgm', action='store_true', default=True)
+    parser.add_argument('--use_fgm', action='store_true', default=False)
     parser.add_argument('--use_pgd', action='store_true', default=False)
+    parser.add_argument('--ema_decay', type=float, default=0)
+    parser.add_argument('--warmup_ratio', type=float, default=0)
 
-    parser.add_argument('--ema_decay', type=float, default=0.999)
-    parser.add_argument('--warmup_ratio', type=float, default=0.01)
     parser.add_argument('--adv_k', type=int, default=3)
     parser.add_argument('--alpha', type=float, default=0.3)
     parser.add_argument('--epsilon', type=float, default=1.0)
     parser.add_argument('--emb_name', type=str, default='word_embeddings.')
 
-    parser.add_argument('--fold', type=int, default=10)
+    parser.add_argument('--fold', type=int, default=5)
     parser.add_argument('--extend_save_path', type=str,
                         default='./extend_data/')
     parser.add_argument('--vote_path', type=str,

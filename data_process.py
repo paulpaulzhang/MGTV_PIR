@@ -30,11 +30,8 @@ def clean_tag(text):
 
 
 def text_enchance(text):
-    # text = text.strip(' ')
     text = clean_url(text)
-    # text = clean_tag(text)
-    text = re.sub('[？！\r\n\']', '', text)  # [\r\n]
-    # text = re.sub('[？！，、,/\'"]', ' ', text)
+    text = re.sub('[？！\r\n\']', '', text)
     text = ' '.join(text.split())
     if '复制' in text:
         text = ''
@@ -55,7 +52,7 @@ def word_select(text):
     return ','.join(words[:random.randint(1, max(1, len(words)-1))])
 
 
-def random_select(df, repeat_num=10):
+def random_select(df, repeat_num=1):
     random_sentences = []
     for item in tqdm(df.itertuples(), total=len(df)):
         text = item[2]
@@ -70,7 +67,7 @@ def generate_sentences(words, gen_max_len):
     return ','.join(words[:random.randint(1, gen_max_len)])
 
 
-def redistribution(df, gen_num_by_label=1000, gen_max_len=6):
+def redistribution(df, gen_num_by_label=100, gen_max_len=6):
     label_df = df[['text', 'label']].groupby(by='label',
                                              as_index=False)['text'].apply(lambda x: ','.join(x))
     label_df['words'] = label_df['text'].apply(
