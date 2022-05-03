@@ -1,3 +1,7 @@
+import pandas as pd
+from sklearn.utils import shuffle
+from tqdm import tqdm
+import random
 import re
 
 
@@ -26,15 +30,16 @@ def clean_tag(text):
 
 
 def text_enchance(text):
-    text = text.strip(' ')
-    # text = clean_url(text)
+    # text = text.strip(' ')
+    text = clean_url(text)
     # text = clean_tag(text)
-    # text = re.sub('[\r\n]', '', text) # [？！\r\n]
-    # text = re.sub('[？！，、,/\'"]', ' ', text) 
-    # text = ' '.join(text.split())
-    # if '复制' in text:
-    #    text = ''
+    text = re.sub('[？！\r\n\']', '', text)  # [\r\n]
+    # text = re.sub('[？！，、,/\'"]', ' ', text)
+    text = ' '.join(text.split())
+    if '复制' in text:
+        text = ''
     return text
+
 
 def clean_blank(text):
     text = text.replace(',', ' ')
@@ -44,8 +49,6 @@ def clean_blank(text):
     return text
 
 
-import random
-from tqdm import tqdm
 def word_select(text):
     words = text.split(',')
     random.shuffle(words)
@@ -58,41 +61,42 @@ def random_select(df, repeat_num=10):
         text = item[2]
         label = item[3]
         random_sentences.extend([[word_select(text), label]
-             for _ in range(repeat_num)])
+                                 for _ in range(repeat_num)])
     return random_sentences
 
 
 def generate_sentences(words, gen_max_len):
-        random.shuffle(words)
-        return ','.join(words[:random.randint(1, gen_max_len)])
+    random.shuffle(words)
+    return ','.join(words[:random.randint(1, gen_max_len)])
+
 
 def redistribution(df, gen_num_by_label=1000, gen_max_len=6):
-        label_df = df[['text', 'label']].groupby(by='label',
-                as_index=False)['text'].apply(lambda x: ','.join(x))
-        label_df['words'] = label_df['text'].apply(
-                lambda x: list(set(x.split(','))))
-        redistribution_sentences = []
-        for item in tqdm(label_df.itertuples(), total=len(label_df)):
-                label = item[1]
-                words = item[3]
-                redistribution_sentences.extend(
-                        [generate_sentences(words, gen_max_len), label]
-                        for _ in range(gen_num_by_label))
-        return redistribution_sentences
+    label_df = df[['text', 'label']].groupby(by='label',
+                                             as_index=False)['text'].apply(lambda x: ','.join(x))
+    label_df['words'] = label_df['text'].apply(
+        lambda x: list(set(x.split(','))))
+    redistribution_sentences = []
+    for item in tqdm(label_df.itertuples(), total=len(label_df)):
+        label = item[1]
+        words = item[3]
+        redistribution_sentences.extend(
+            [generate_sentences(words, gen_max_len), label]
+            for _ in range(gen_num_by_label))
+    return redistribution_sentences
 
-
-from sklearn.utils import shuffle
-import pandas as pd
 
 if __name__ == '__main__':
     goods_data = pd.read_csv('../data/a_dataset/goods_data.csv')
     goods_data['text'] = goods_data['text'].apply(clean_blank)
 
-    random_df = pd.DataFrame(random_select(goods_data), columns=['text', 'label'])
-    redistribution_df = pd.DataFrame(redistribution(goods_data), 
-                columns=['text', 'label'])
-                
-    extend_data_df = pd.concat([random_df, redistribution_df], axis=0).reset_index(drop=True)
+    random_df = pd.DataFrame(random_select(
+        goods_data), columns=['text', 'label'])
+    redistribution_df = pd.DataFrame(redistribution(goods_data),
+                                     columns=['text', 'label'])
+
+    extend_data_df = pd.concat(
+        [random_df, redistribution_df], axis=0).reset_index(drop=True)
     extend_data_df = extend_data_df.drop_duplicates()
     extend_data_df = shuffle(extend_data_df).reset_index(drop=True)
-    extend_data_df.to_csv('../data/a_dataset/extend_data.csv', index_label='id')
+    extend_data_df.to_csv(
+        '../data/a_dataset/extend_data.csv', index_label='id')
