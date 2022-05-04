@@ -1,3 +1,4 @@
+from email.policy import strict
 from pathlib import Path
 import numpy as np
 from torch.utils.data import DataLoader
@@ -32,10 +33,10 @@ def build_model_and_tokenizer(args, num_labels, is_train=True):
     if is_train:
         bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertForSequenceClassification(config, bert)
+        dl_module = BertEnsambleForSequenceClassification(config, bert)
     else:
         bert = NeZhaModel(config=config)
-        dl_module = BertForSequenceClassification(config, bert)
+        dl_module = BertEnsambleForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 
@@ -151,7 +152,7 @@ def predict(args):
 
     tokenizer, model = build_model_and_tokenizer(
         args, len(test_dataset.cat2id), is_train=False)
-    model.load_state_dict(torch.load(args.predict_model))
+    model.load_state_dict(torch.load(args.predict_model), strict=False)
     model.to(torch.device(args.device))
 
     test_dataset.convert_to_ids(tokenizer)
@@ -192,8 +193,8 @@ def train_cv(args):
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
-    # data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
-    # data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
+    data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
+    data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
 
     kfold = StratifiedKFold(
         n_splits=args.fold, shuffle=True, random_state=args.seed)
@@ -255,13 +256,13 @@ def predict_vote(args):
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
 
-    # train_data_df['text'] = train_data_df['text'].apply(
-    #     lambda x: text_enchance(x))
-    # train_data_df = train_data_df.drop(
-    #     train_data_df[(train_data_df['text'] == '')].index)
-    # test_data_df['text'] = test_data_df['text'].apply(
-    #     lambda x: text_enchance(x))
-    # test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+    test_data_df['text'] = test_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -290,7 +291,7 @@ def predict_vote(args):
 
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(args.predict_model))
+        model.load_state_dict(torch.load(args.predict_model), strict=False)
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -312,8 +313,8 @@ def predict_vote(args):
         os.makedirs(args.save_path, exist_ok=True)
         test_data_df['label'] = [test_dataset.id2cat[label]
                                  for label in y_pred]
-        # test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
-        # test_data_df['label'] = test_data_df['label'].astype('int')
+        test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+        test_data_df['label'] = test_data_df['label'].astype('int')
         test_data_df.to_csv(os.path.join(
             args.save_path, f'{model_type}-{fold + 1}.csv'), index=None)
 
@@ -326,13 +327,13 @@ def predict_merge(args):
     test_data_df['label'] = 1
     test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
 
-    # train_data_df['text'] = train_data_df['text'].apply(
-    #     lambda x: text_enchance(x))
-    # train_data_df = train_data_df.drop(
-    #     train_data_df[(train_data_df['text'] == '')].index)
-    # test_data_df['text'] = test_data_df['text'].apply(
-    #     lambda x: text_enchance(x))
-    # test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
+    train_data_df['text'] = train_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    train_data_df = train_data_df.drop(
+        train_data_df[(train_data_df['text'] == '')].index)
+    test_data_df['text'] = test_data_df['text'].apply(
+        lambda x: text_enchance(x))
+    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
 
     test_dataset = SentenceClassificationDataset(
         test_data_df, categories=sorted(train_data_df['label'].unique()))
@@ -362,7 +363,7 @@ def predict_merge(args):
 
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(args.predict_model))
+        model.load_state_dict(torch.load(args.predict_model), strict=False)
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -385,8 +386,8 @@ def predict_merge(args):
 
     test_data_df['label'] = [test_dataset.id2cat[id_]
                              for id_ in np.argmax(y_preds, axis=1)]
-    # test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
-    # test_data_df['label'] = test_data_df['label'].astype('int')
+    test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
+    test_data_df['label'] = test_data_df['label'].astype('int')
     test_data_df.to_csv(os.path.join(
         args.save_path, f'results.csv'), index=None)
 
