@@ -79,7 +79,7 @@ class Task(SequenceClassificationTask):
 
                 # input处理和设备转移
                 inputs = self._get_module_inputs_on_train(inputs, **kwargs)
-                
+
                 outputs = self.module(**inputs)
                 logits, loss = self._get_train_loss(inputs, outputs, **kwargs)
 
@@ -106,11 +106,13 @@ class Task(SequenceClassificationTask):
                 self.ema.copy_to(self.module.parameters())
 
             if save_each_model:
-                torch.save(self.module.state_dict(),
-                           os.path.join(ckpt, f'epoch{epoch}.pth'))
-            else:
-                torch.save(self.module.state_dict(),
-                           os.path.join(ckpt, f'last_model.pth'))
+                state_dict = {k: v for k, v in self.module.state_dict(
+                ).items() if 'relative_positions' not in k}
+                torch.save(state_dict, os.path.join(ckpt, f'epoch{epoch}.pth'))
+            # else:
+            #     state_dict = {k: v for k, v in self.module.state_dict(
+            #     ).items() if 'relative_positions' not in k}
+            #     torch.save(state_dict, os.path.join(ckpt, f'last_model.pth'))
 
             if self.ema_decay:
                 self.ema.restore(self.module.parameters())
@@ -292,8 +294,9 @@ class Task(SequenceClassificationTask):
 
         if self.evaluate_logs['f1'] > self.best_f1 and ckpt:
             self.best_f1 = self.evaluate_logs['f1']
-            torch.save(self.module.state_dict(),
-                       os.path.join(ckpt, f'best_model.pth'))
+            state_dict = {k: v for k, v in self.module.state_dict(
+            ).items() if 'relative_positions' not in k}
+            torch.save(state_dict, os.path.join(ckpt, f'best_model.pth'))
 
         if self.ema_decay:
             self.ema.restore(self.module.parameters())
@@ -368,7 +371,7 @@ class StepTask(SequenceClassificationTask):
 
                 # input处理和设备转移
                 inputs = self._get_module_inputs_on_train(inputs, **kwargs)
-                
+
                 outputs = self.module(**inputs)
                 logits, loss = self._get_train_loss(inputs, outputs, **kwargs)
 

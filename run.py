@@ -447,10 +447,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
 
-    parser.add_argument('--use_fgm', action='store_true', default=False)
+    parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)
-    parser.add_argument('--ema_decay', type=float, default=0)
-    parser.add_argument('--warmup_ratio', type=float, default=0)
+    parser.add_argument('--ema_decay', type=float, default=0.999)
+    parser.add_argument('--warmup_ratio', type=float, default=0.1)
 
     parser.add_argument('--adv_k', type=int, default=3)
     parser.add_argument('--alpha', type=float, default=0.3)
