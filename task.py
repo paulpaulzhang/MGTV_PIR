@@ -356,7 +356,9 @@ class StepTask(SequenceClassificationTask):
         logs.write(
             f"|{'step':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
         early_stopping = 10
+
         total_steps = epochs * len(train_generator)
+        cur_step = 1
 
         for epoch in range(1, epochs+1):
 
@@ -391,39 +393,39 @@ class StepTask(SequenceClassificationTask):
                 self._on_step_end(step, inputs, outputs,
                                   loss, verbose=False, **kwargs)
 
-            self._on_epoch_end(epoch, verbose=False, **kwargs)
+                # TODO 完善step评测 
+                if cur_step % args.eval_step == 0:
+                    if self.ema_decay:
+                        self.ema.store(self.module.parameters())
+                        self.ema.copy_to(self.module.parameters())
 
-            if self.ema_decay:
-                self.ema.store(self.module.parameters())
-                self.ema.copy_to(self.module.parameters())
+                    if save_each_model:
+                        torch.save(self.module.state_dict(),
+                                   os.path.join(ckpt, f'step{cur_step}.pth'))
+                    else:
+                        torch.save(self.module.state_dict(),
+                                   os.path.join(ckpt, f'last_model.pth'))
 
-            if save_each_model:
-                torch.save(self.module.state_dict(),
-                           os.path.join(ckpt, f'epoch{epoch}.pth'))
-            else:
-                torch.save(self.module.state_dict(),
-                           os.path.join(ckpt, f'last_model.pth'))
+                    if self.ema_decay:
+                        self.ema.restore(self.module.parameters())
 
-            if self.ema_decay:
-                self.ema.restore(self.module.parameters())
+                    if validation_data is not None:
+                        self.evaluate(validation_data, ckpt=ckpt, ** kwargs)
 
-            if validation_data is not None:
-                self.evaluate(validation_data, ckpt=ckpt, ** kwargs)
+                        content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
+                            epoch,
+                            round(self.evaluate_logs['eval_loss'] /
+                                  self.evaluate_logs['eval_step'], 5),
+                            round(self.evaluate_logs['precision'], 5), round(
+                                self.evaluate_logs['recall'], 5),
+                            round(self.evaluate_logs['f1'], 5))
+                        logs.write(content)
 
-                content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
-                    epoch,
-                    round(self.evaluate_logs['eval_loss'] /
-                          self.evaluate_logs['eval_step'], 5),
-                    round(self.evaluate_logs['precision'], 5), round(
-                        self.evaluate_logs['recall'], 5),
-                    round(self.evaluate_logs['f1'], 5))
-                logs.write(content)
+                        if self.evaluate_logs['f1'] < self.best_f1:
+                            early_stopping -= 1
 
-                if self.evaluate_logs['f1'] < self.best_f1:
-                    early_stopping -= 1
-
-                if early_stopping == 0:
-                    break
+                        if early_stopping == 0:
+                            break
 
         self._on_train_end(**kwargs)
 

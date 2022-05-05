@@ -189,7 +189,7 @@ def predict(args):
 def train_cv(args):
     data_df = pd.read_csv(args.data_path)
     goods_df = pd.read_csv(args.goods_data_path)
-   # extend_df = pd.read_csv('../data/a_dataset/extend_data.csv')
+    # extend_df = pd.read_csv('../data/a_dataset/extend_data.csv')
     data_df = pd.concat([data_df, goods_df])
     data_df['label'] = data_df['label'].apply(lambda x: str(x))
 
