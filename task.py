@@ -319,7 +319,6 @@ class StepTask(SequenceClassificationTask):
         batch_size=32,
         epochs=1,
         gradient_accumulation_steps=1,
-        save_each_model=True,
         **kwargs
     ):
         """
