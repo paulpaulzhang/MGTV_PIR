@@ -411,6 +411,8 @@ class StepTask(SequenceClassificationTask):
                             if early_stopping == 0:
                                 self._on_train_end(**kwargs)
                                 return
+                                
+                            self.module.train()
 
         self._on_train_end(**kwargs)
 
