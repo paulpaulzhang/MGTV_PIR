@@ -14,7 +14,7 @@ from model.nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassificatio
 from tokenizer import BertSpanTokenizer
 from utils import WarmupLinearSchedule, seed_everything, get_default_bert_optimizer
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
-from task import Task
+from task import Task, StepTask
 from tqdm import tqdm
 from argparse import ArgumentParser
 from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification
@@ -27,16 +27,16 @@ import warnings
 
 def build_model_and_tokenizer(args, num_labels, is_train=True):
     tokenizer = BertSpanTokenizer(vocab=args.model_name_or_path,
-                              max_seq_len=args.max_seq_len)
+                                  max_seq_len=args.max_seq_len)
     config = NeZhaConfig.from_pretrained(args.model_name_or_path,
                                          num_labels=num_labels)
     if is_train:
         bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertForSequenceClassification(config, bert)
     else:
         bert = NeZhaModel(config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 
@@ -69,7 +69,8 @@ def train(args):
 
     if args.warmup_ratio:
         train_steps = args.num_epochs * \
-            int(math.ceil(len(train_dataset) / args.batch_size))
+            int(math.ceil(math.ceil(len(train_dataset) /
+                args.batch_size) / args.gradient_accumulation_steps))
         scheduler = WarmupLinearSchedule(
             optimizer, warmup_steps=train_steps * args.warmup_ratio, t_total=train_steps)
     else:
@@ -77,11 +78,11 @@ def train(args):
 
     torch.cuda.empty_cache()
 
-    model = Task(
+    model = StepTask(
         dl_module, optimizer, 'ce',
         scheduler=scheduler,
         ema_decay=args.ema_decay,
-        cuda_device=args.cuda_device)
+        device=args.device)
 
     model.fit(args,
               train_dataset,
@@ -113,7 +114,7 @@ def evaluate(args):
 
     tokenizer, dl_module = build_model_and_tokenizer(
         args, len(train_dataset.cat2id), is_train=False)
-    dl_module.load_state_dict(torch.load(args.predict_model))
+    dl_module.load_state_dict(torch.load(args.predict_model), strict=False)
 
     train_dataset.convert_to_ids(tokenizer)
     dev_dataset.convert_to_ids(tokenizer)
@@ -123,12 +124,13 @@ def evaluate(args):
     torch.cuda.empty_cache()
 
     model = Task(
-        dl_module, optimizer, 'lsce',
+        dl_module, optimizer, 'ce',
         ema_decay=args.ema_decay,
-        cuda_device=args.cuda_device)
+        device=args.device)
 
     model.id2cat = train_dataset.id2cat
-    model.evaluate(dev_dataset, num_workers=args.num_workers)
+    model.evaluate(dev_dataset, num_workers=args.num_workers,
+                   evaluate_batch_size=args.batch_size)
 
 
 def predict(args):
@@ -168,13 +170,13 @@ def predict(args):
     with torch.no_grad():
         for inputs in tqdm(test_generator):
             inputs['input_ids'] = inputs['input_ids'].to(
-                torch.device(f'cuda:{args.cuda_device}'))
+                torch.device(args.device))
             inputs['attention_mask'] = inputs['attention_mask'].to(
-                torch.device(f'cuda:{args.cuda_device}'))
+                torch.device(args.device))
             inputs['token_type_ids'] = inputs['token_type_ids'].to(
-                torch.device(f'cuda:{args.cuda_device}'))
+                torch.device(args.device))
             inputs['label_ids'] = inputs['label_ids'].to(
-                torch.device(f'cuda:{args.cuda_device}'))
+                torch.device(args.device))
 
             outputs = model(**inputs)
             y_pred += torch.argmax(outputs, dim=1).cpu().numpy().tolist()
@@ -220,7 +222,8 @@ def train_cv(args):
 
         if args.warmup_ratio:
             train_steps = args.num_epochs * \
-                int(math.ceil(len(train_dataset) / args.batch_size))
+                int(math.ceil(math.ceil(len(train_dataset) /
+                    args.batch_size) / args.gradient_accumulation_steps))
             scheduler = WarmupLinearSchedule(
                 optimizer, warmup_steps=train_steps * args.warmup_ratio, t_total=train_steps)
         else:
@@ -447,6 +450,8 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument('--eval_steps', type=int, default=100)
+    parser.add_argument('--early_stopping', type=int, default=5)
 
     parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)

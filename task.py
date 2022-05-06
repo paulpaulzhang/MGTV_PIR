@@ -1,4 +1,5 @@
 from ast import arg
+import math
 import os
 import warnings
 from ark_nlp.factory.task.base._sequence_classification import SequenceClassificationTask
@@ -354,20 +355,18 @@ class StepTask(SequenceClassificationTask):
         logs = Logs(os.path.join(ckpt, 'log.txt'))
         logs.write(str(args) + '\n')
         logs.write(
-            f"|{'step':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
-        early_stopping = 10
+            f"|{'steps':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
+        early_stopping = args.early_stopping
 
-        total_steps = epochs * len(train_generator)
-        cur_step = 1
-
+        total_steps = epochs * \
+            int(math.ceil(len(train_generator) / gradient_accumulation_steps))
+        cur_step = 0
+        progress_bar = tqdm(range(total_steps))
         for epoch in range(1, epochs+1):
 
             self._on_epoch_begin(**kwargs)
 
-            train_iterator = tqdm(
-                train_generator, desc=f'Epoch : {epoch}', total=len(train_generator))
-
-            for step, inputs in enumerate(train_iterator):
+            for step, inputs in enumerate(train_generator):
 
                 self._on_step_begin(epoch, step, inputs, **kwargs)
 
@@ -381,51 +380,38 @@ class StepTask(SequenceClassificationTask):
                 loss = self._on_backward(
                     inputs, outputs, logits, loss, args=args, **kwargs)
 
-                if (step + 1) % gradient_accumulation_steps == 0:
+                if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_generator):
 
                     # optimize
                     self._on_optimize(inputs, outputs, logits, loss, **kwargs)
 
-                    train_iterator.set_postfix_str(
+                    progress_bar.set_postfix_str(
                         f"training loss: {(self.logs['epoch_loss'] / self.logs['epoch_step']):.4f}")
 
-                # setp evaluate
-                self._on_step_end(step, inputs, outputs,
-                                  loss, verbose=False, **kwargs)
+                    progress_bar.update(1)
+                    cur_step += 1
 
-                # TODO 完善step评测 
-                if cur_step % args.eval_step == 0:
-                    if self.ema_decay:
-                        self.ema.store(self.module.parameters())
-                        self.ema.copy_to(self.module.parameters())
+                    if cur_step % args.eval_steps == 0 or (step + 1) == len(train_generator):
+                        if validation_data is not None:
+                            self.evaluate(validation_data, ckpt=ckpt, ** kwargs)
 
-                    if save_each_model:
-                        torch.save(self.module.state_dict(),
-                                   os.path.join(ckpt, f'step{cur_step}.pth'))
-                    else:
-                        torch.save(self.module.state_dict(),
-                                   os.path.join(ckpt, f'last_model.pth'))
+                            content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
+                                cur_step,
+                                round(self.evaluate_logs['eval_loss'] /
+                                        self.evaluate_logs['eval_step'], 3),
+                                round(self.evaluate_logs['precision'], 3), round(
+                                    self.evaluate_logs['recall'], 3),
+                                round(self.evaluate_logs['f1'], 5))
+                            logs.write(content)
 
-                    if self.ema_decay:
-                        self.ema.restore(self.module.parameters())
+                            if self.evaluate_logs['f1'] < self.best_f1:
+                                early_stopping -= 1
+                            else:
+                                early_stopping = args.early_stopping
 
-                    if validation_data is not None:
-                        self.evaluate(validation_data, ckpt=ckpt, ** kwargs)
-
-                        content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
-                            epoch,
-                            round(self.evaluate_logs['eval_loss'] /
-                                  self.evaluate_logs['eval_step'], 5),
-                            round(self.evaluate_logs['precision'], 5), round(
-                                self.evaluate_logs['recall'], 5),
-                            round(self.evaluate_logs['f1'], 5))
-                        logs.write(content)
-
-                        if self.evaluate_logs['f1'] < self.best_f1:
-                            early_stopping -= 1
-
-                        if early_stopping == 0:
-                            break
+                            if early_stopping == 0:
+                                self._on_train_end(**kwargs)
+                                return
 
         self._on_train_end(**kwargs)
 
@@ -575,7 +561,7 @@ class StepTask(SequenceClassificationTask):
             self.evaluate_logs['f1'] = f1
             self.evaluate_logs['precision'] = precision
             self.evaluate_logs['recall'] = recall
-            print('eval loss: {:.6f}, precision: {:.6f}, recall: {:.6f}, f1_score: {:.6f}\n'.format(
+            print('\neval loss: {:.6f}, precision: {:.6f}, recall: {:.6f}, f1_score: {:.6f}\n'.format(
                 self.evaluate_logs['eval_loss'] /
                 self.evaluate_logs['eval_step'],
                 precision, recall, f1))
@@ -586,8 +572,9 @@ class StepTask(SequenceClassificationTask):
 
         if self.evaluate_logs['f1'] > self.best_f1 and ckpt:
             self.best_f1 = self.evaluate_logs['f1']
-            torch.save(self.module.state_dict(),
-                       os.path.join(ckpt, f'best_model.pth'))
+            state_dict = {k: v for k, v in self.module.state_dict(
+            ).items() if 'relative_positions' not in k}
+            torch.save(state_dict, os.path.join(ckpt, f'best_model.pth'))
 
         if self.ema_decay:
             self.ema.restore(self.module.parameters())
