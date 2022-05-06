@@ -14,10 +14,10 @@ from model.nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassificatio
 from tokenizer import BertSpanTokenizer
 from utils import WarmupLinearSchedule, seed_everything, get_default_bert_optimizer
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
-from task import Task, StepTask
+from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
-from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification
+from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification, BertBiLSTMForSequenceClassification
 from data_process import text_enchance
 import pandas as pd
 import torch
@@ -33,10 +33,10 @@ def build_model_and_tokenizer(args, num_labels, is_train=True):
     if is_train:
         bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertForSequenceClassification(config, bert)
+        dl_module = BertBiLSTMForSequenceClassification(config, bert)
     else:
         bert = NeZhaModel(config=config)
-        dl_module = BertForSequenceClassification(config, bert)
+        dl_module = BertBiLSTMForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 
@@ -78,7 +78,7 @@ def train(args):
 
     torch.cuda.empty_cache()
 
-    model = StepTask(
+    model = Task(
         dl_module, optimizer, 'ce',
         scheduler=scheduler,
         ema_decay=args.ema_decay,
@@ -451,7 +451,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
     parser.add_argument('--eval_steps', type=int, default=100)
-    parser.add_argument('--early_stopping', type=int, default=5)
+    parser.add_argument('--early_stopping', type=int, default=1)
+    parser.add_argument('--training_strategy', type=str,
+                        default='step', choices=['step', 'epoch'])
 
     parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)
