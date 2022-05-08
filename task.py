@@ -64,26 +64,17 @@ class Task(SequenceClassificationTask):
         for k, v in vars(args).items():
             logs.write(f'{k}: {v}' + '\n')
         logs.write(
-            f"|{'steps':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
-
-        one_epoch = int(math.ceil(len(train_generator) /
-                        gradient_accumulation_steps))  # 将step转换为epoch
-        total_steps = epochs * one_epoch
-        cur_steps = 0
-
-        args.early_stopping = int(
-            math.ceil(args.early_stopping * one_epoch / args.eval_steps))
+            f"|{'epoch':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
         early_stopping = args.early_stopping
 
-        if args.training_strategy == 'epoch':
-            args.eval_steps = one_epoch
-
-        progress_bar = tqdm(range(total_steps))
         for epoch in range(1, epochs+1):
 
             self._on_epoch_begin(**kwargs)
 
-            for step, inputs in enumerate(train_generator):
+            train_iterator = tqdm(
+                train_generator, desc=f'Epoch : {epoch}', total=len(train_generator))
+
+            for step, inputs in enumerate(train_iterator):
 
                 self._on_step_begin(epoch, step, inputs, **kwargs)
 
@@ -97,45 +88,40 @@ class Task(SequenceClassificationTask):
                 loss = self._on_backward(
                     inputs, outputs, logits, loss, args=args, **kwargs)
 
-                if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_generator):
+                if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_iterator):
 
                     # optimize
                     self._on_optimize(inputs, outputs, logits, loss, **kwargs)
 
-                    progress_bar.set_postfix_str(
-                        "epoch: {:.2f} loss: {:.4f}".
-                        format(cur_steps / len(train_generator),
-                               (self.logs['epoch_loss'] / self.logs['epoch_step'])))
+                    train_iterator.set_postfix_str(
+                        f"training loss: {(self.logs['epoch_loss'] / self.logs['epoch_step']):.4f}")
 
-                    progress_bar.update(1)
-                    cur_steps += 1
+                # setp evaluate
+                self._on_step_end(step, inputs, outputs,
+                                  loss, verbose=False, **kwargs)
 
-                    if cur_steps % args.eval_steps == 0 or (step + 1) == len(train_generator):
-                        if validation_data is not None:
-                            self.evaluate(validation_data,
-                                          ckpt=ckpt, ** kwargs)
+            self._on_epoch_end(epoch, verbose=False, **kwargs)
 
-                            content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
-                                cur_steps,
-                                round(self.evaluate_logs['eval_loss'] /
-                                      self.evaluate_logs['eval_step'], 3),
-                                round(self.evaluate_logs['precision'], 3), round(
-                                    self.evaluate_logs['recall'], 3),
-                                round(self.evaluate_logs['f1'], 5))
-                            logs.write(content)
+            if validation_data is not None:
+                self.evaluate(validation_data, ckpt=ckpt, ** kwargs)
 
-                            if self.evaluate_logs['f1'] < self.best_f1:
-                                early_stopping -= 1
-                            else:
-                                early_stopping = args.early_stopping
+                content = "|{:^15}|{:^15}|{:^15}|{:^15}|{:^15}|\n".format(
+                    epoch,
+                    round(self.evaluate_logs['eval_loss'] /
+                          self.evaluate_logs['eval_step'], 5),
+                    round(self.evaluate_logs['precision'], 5), round(
+                        self.evaluate_logs['recall'], 5),
+                    round(self.evaluate_logs['f1'], 5))
+                logs.write(content)
 
-                            if early_stopping == 0:
-                                self._on_train_end(**kwargs)
-                                return
+                if self.evaluate_logs['f1'] < self.best_f1:
+                    early_stopping -= 1
+                else:
+                    early_stopping = args.early_stopping
 
-                            self.module.train()
+                if early_stopping == 0:
+                    break
 
-        print('best f1:', self.best_f1)
         self._on_train_end(ckpt=ckpt, **kwargs)
 
     def _on_train_begin(
@@ -191,6 +177,9 @@ class Task(SequenceClassificationTask):
         return train_generator
 
     def _on_train_end(self, ckpt=None, save_last_model=False, **kwargs):
+        if self.best_f1 != 0:
+            print('best f1:', self.best_f1)
+
         if save_last_model:
             if self.ema_decay:
                 self.ema.store(self.module.parameters())

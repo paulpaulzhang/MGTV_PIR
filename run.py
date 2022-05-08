@@ -90,7 +90,7 @@ def train(args):
               epochs=args.num_epochs,
               batch_size=args.batch_size,
               num_workers=args.num_workers,
-              save_each_model=False,
+              save_last_model=False,
               gradient_accumulation_steps=args.gradient_accumulation_steps)
 
 
@@ -229,8 +229,6 @@ def train_cv(args):
         else:
             scheduler = None
 
-        torch.cuda.empty_cache()
-
         model = Task(
             dl_module, optimizer, 'ce',
             scheduler=scheduler,
@@ -243,7 +241,7 @@ def train_cv(args):
                   epochs=args.num_epochs,
                   batch_size=args.batch_size,
                   num_workers=args.num_workers,
-                  save_each_model=False,
+                  save_last_model=False,
                   gradient_accumulation_steps=args.gradient_accumulation_steps)
 
         del model, tokenizer, dl_module, optimizer, scheduler
@@ -450,10 +448,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
-    parser.add_argument('--eval_steps', type=int, default=100)
     parser.add_argument('--early_stopping', type=int, default=1)
-    parser.add_argument('--training_strategy', type=str,
-                        default='step', choices=['step', 'epoch'])
 
     parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)
