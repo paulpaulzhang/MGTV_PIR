@@ -443,6 +443,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_seq_len', type=int, default=64)
 
     parser.add_argument('--lr', type=float, default=2e-5)
+    parser.add_argument('--lstm_lr', type=float, default=1e-2)
     parser.add_argument('--clf_lr', type=float, default=2e-4)
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=16)
@@ -459,6 +460,8 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.3)
     parser.add_argument('--epsilon', type=float, default=1.0)
     parser.add_argument('--emb_name', type=str, default='word_embeddings.')
+    parser.add_argument('--adv_lr', type=int, default=3)  # TODO
+    parser.add_argument('--adv_eps', type=int, default=3)  # TODO
 
     parser.add_argument('--fold', type=int, default=5)
     parser.add_argument('--extend_save_path', type=str,

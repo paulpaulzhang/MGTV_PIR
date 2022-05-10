@@ -232,6 +232,78 @@ class PGD(object):
                 param.grad = self.grad_backup[name]
 
 
+class AWP:
+    def __init__(
+        self,
+        model,
+        optimizer,
+        adv_param="weight",
+        adv_lr=1,
+        adv_eps=0.2,
+        start_epoch=0,
+        adv_step=1,
+    ):
+        self.model = model
+        self.optimizer = optimizer
+        self.adv_param = adv_param
+        self.adv_lr = adv_lr
+        self.adv_eps = adv_eps
+        self.start_epoch = start_epoch
+        self.adv_step = adv_step
+        self.backup = {}
+        self.backup_eps = {}
+
+    # TODO
+    def attack_backward(self, x, y, attention_mask, epoch):
+        if (self.adv_lr == 0) or (epoch < self.start_epoch):
+            return None
+
+        self._save()
+        for i in range(self.adv_step):
+            self._attack_step()
+
+            adv_loss, tr_logits = self.model(
+                input_ids=x, attention_mask=attention_mask, labels=y)
+            adv_loss = adv_loss.mean()
+            self.optimizer.zero_grad()
+            adv_loss.backward()
+
+        self._restore()
+
+    def _attack_step(self):
+        e = 1e-6
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and param.grad is not None and self.adv_param in name:
+                norm1 = torch.norm(param.grad)
+                norm2 = torch.norm(param.data.detach())
+                if norm1 != 0 and not torch.isnan(norm1):
+                    r_at = self.adv_lr * param.grad / (norm1 + e) * (norm2 + e)
+                    param.data.add_(r_at)
+                    param.data = torch.min(
+                        torch.max(
+                            param.data, self.backup_eps[name][0]), self.backup_eps[name][1]
+                    )
+                # param.data.clamp_(*self.backup_eps[name])
+
+    def _save(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and param.grad is not None and self.adv_param in name:
+                if name not in self.backup:
+                    self.backup[name] = param.data.clone()
+                    grad_eps = self.adv_eps * param.abs().detach()
+                    self.backup_eps[name] = (
+                        self.backup[name] - grad_eps,
+                        self.backup[name] + grad_eps,
+                    )
+
+    def _restore(self,):
+        for name, param in self.model.named_parameters():
+            if name in self.backup:
+                param.data = self.backup[name]
+        self.backup = {}
+        self.backup_eps = {}
+
+
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -274,12 +346,15 @@ def get_default_bert_optimizer(
     no_decay = ["bias", "LayerNorm.weight"]
 
     bert_param_optimizer = []
+    lstm_param_optimizer = []
     classifier_param_optimizer = []
 
     for name, param in model_param:
         space = name.split('.')
         if space[0] == 'bert':
             bert_param_optimizer.append((name, param))
+        elif space[0] == 'bilstm':
+            lstm_param_optimizer.append((name, param))
         elif space[0] == 'classifier':
             classifier_param_optimizer.append((name, param))
 
@@ -288,6 +363,11 @@ def get_default_bert_optimizer(
             "weight_decay": weight_decay, 'lr': args.lr},
         {"params": [p for n, p in bert_param_optimizer if any(nd in n for nd in no_decay)],
             "weight_decay": 0.0, 'lr': args.lr},
+
+        {"params": [p for n, p in lstm_param_optimizer if not any(nd in n for nd in no_decay)],
+            "weight_decay": weight_decay, 'lr': args.lstm_lr},
+        {"params": [p for n, p in lstm_param_optimizer if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0, 'lr': args.lstm_lr},
 
         {"params": [p for n, p in classifier_param_optimizer if not any(nd in n for nd in no_decay)],
             "weight_decay": weight_decay, 'lr': args.clf_lr},

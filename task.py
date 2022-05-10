@@ -3,7 +3,7 @@ import math
 import os
 import warnings
 from ark_nlp.factory.task.base._sequence_classification import SequenceClassificationTask
-from utils import FGM, PGD
+from utils import FGM, PGD, AWP
 from torch.utils.data import DataLoader
 from ark_nlp.factory.optimizer import get_optimizer
 import torch
@@ -91,7 +91,8 @@ class Task(SequenceClassificationTask):
                 if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_iterator):
 
                     # optimize
-                    self._on_optimize(inputs, outputs, logits, loss, **kwargs)
+                    self._on_optimize(inputs, outputs, logits,
+                                      loss, grad_clip=10, ** kwargs)
 
                     train_iterator.set_postfix_str(
                         f"training loss: {(self.logs['epoch_loss'] / self.logs['epoch_step']):.4f}")
@@ -171,6 +172,12 @@ class Task(SequenceClassificationTask):
             self.fgm = FGM(self.module)
         if args.use_pgd:
             self.pgd = PGD(self.module)
+        if args.use_awp:
+            self.awp = AWP(self.module,
+                           self.optimizer,
+                           adv_lr=args.adv_lr,
+                           adv_eps=args.adv_eps,
+                           start_epoch=args.warmup_ratio*args.num_epochs)
 
         self._on_train_begin_record(**kwargs)
 
