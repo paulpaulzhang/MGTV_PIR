@@ -340,7 +340,6 @@ def get_default_bert_optimizer(
     args,
     eps: float = 1e-6,
     correct_bias: bool = True,
-    weight_decay: float = 1e-3,
 ):
     model_param = list(module.named_parameters())
     no_decay = ["bias", "LayerNorm.weight"]
@@ -360,17 +359,17 @@ def get_default_bert_optimizer(
 
     optimizer_grouped_parameters = [
         {"params": [p for n, p in bert_param_optimizer if not any(nd in n for nd in no_decay)],
-            "weight_decay": weight_decay, 'lr': args.lr},
+            "weight_decay": args.weight_decay, 'lr': args.lr},
         {"params": [p for n, p in bert_param_optimizer if any(nd in n for nd in no_decay)],
             "weight_decay": 0.0, 'lr': args.lr},
 
         {"params": [p for n, p in lstm_param_optimizer if not any(nd in n for nd in no_decay)],
-            "weight_decay": weight_decay, 'lr': args.lstm_lr},
+            "weight_decay": args.weight_decay, 'lr': args.lstm_lr},
         {"params": [p for n, p in lstm_param_optimizer if any(nd in n for nd in no_decay)],
             "weight_decay": 0.0, 'lr': args.lstm_lr},
 
         {"params": [p for n, p in classifier_param_optimizer if not any(nd in n for nd in no_decay)],
-            "weight_decay": weight_decay, 'lr': args.clf_lr},
+            "weight_decay": args.weight_decay, 'lr': args.clf_lr},
         {"params": [p for n, p in classifier_param_optimizer if any(nd in n for nd in no_decay)],
             "weight_decay": 0.0, 'lr': args.clf_lr},
     ]
@@ -379,7 +378,7 @@ def get_default_bert_optimizer(
                       lr=args.lr,
                       eps=eps,
                       correct_bias=correct_bias,
-                      weight_decay=weight_decay)
+                      weight_decay=args.weight_decay)
     return optimizer
 
 
