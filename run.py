@@ -416,9 +416,9 @@ if __name__ == '__main__':
     parser = ArgumentParser()
 
     parser.add_argument('--model_type', type=str,
-                        default='bert_base')
+                        default='nezha_cn_base')
     parser.add_argument('--model_name_or_path', type=str,
-                        default='../pretrain_model/chinese-bert-wwm/')
+                        default='../pretrain_model/nezha-cn-base/')
 
     parser.add_argument('--checkpoint', type=str,
                         default='./checkpoint')
@@ -446,14 +446,16 @@ if __name__ == '__main__':
     parser.add_argument('--lstm_lr', type=float, default=1e-2)
     parser.add_argument('--clf_lr', type=float, default=2e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-3)
+
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=16)
-    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
     parser.add_argument('--early_stopping', type=int, default=1)
+    parser.add_argument('--num_workers', type=int, default=0)
 
     parser.add_argument('--use_fgm', action='store_true', default=True)
     parser.add_argument('--use_pgd', action='store_true', default=False)
+    parser.add_argument('--use_awp', action='store_true', default=False)
     parser.add_argument('--ema_decay', type=float, default=0.999)
     parser.add_argument('--warmup_ratio', type=float, default=0.1)
 
