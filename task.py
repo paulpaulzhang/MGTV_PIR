@@ -218,14 +218,14 @@ class Task(SequenceClassificationTask):
 
         loss.backward()
 
-        if args.use_fgm:
+        if args.use_fgm and epoch > args.warmup_ratio * args.num_epochs:
             self.fgm.attack(epsilon=args.epsilon, emb_name=args.emb_name)
             logits = self.module(**inputs)
             _, attck_loss = self._get_train_loss(inputs, logits, **kwargs)
             attck_loss.backward()
             self.fgm.restore()
 
-        if args.use_pgd:
+        if args.use_pgd and epoch > args.warmup_ratio * args.num_epochs:
             self.pgd.backup_grad()
             for t in range(args.adv_k):
                 self.pgd.attack(is_first_attack=(t == 0))
