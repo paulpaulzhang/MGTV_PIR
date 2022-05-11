@@ -1,6 +1,6 @@
 # coding:utf-8
 
-from sklearn.metrics import f1_score, recall_score, precision_score
+from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_score
 import os
 import random
 import numpy as np
@@ -374,6 +374,6 @@ class Logs:
 
 def metrics(y_true, y_pred):
     f1 = f1_score(y_true, y_pred, average='macro')
-    precision = precision_score(y_true, y_pred, average='macro')
+    accuracy = accuracy_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred, average='macro')
-    return f1, precision, recall
+    return f1, accuracy, recall

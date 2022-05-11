@@ -64,7 +64,7 @@ class Task(SequenceClassificationTask):
         for k, v in vars(args).items():
             logs.write(f'{k}: {v}' + '\n')
         logs.write(
-            f"|{'epoch':^15}|{'loss':^15}|{'precision':^15}|{'recall':^15}|{'f1':^15}|\n")
+            f"|{'epoch':^15}|{'loss':^15}|{'accuracy':^15}|{'recall':^15}|{'f1':^15}|\n")
         early_stopping = args.early_stopping
 
         for epoch in range(1, epochs+1):
@@ -110,7 +110,7 @@ class Task(SequenceClassificationTask):
                     epoch,
                     round(self.evaluate_logs['eval_loss'] /
                           self.evaluate_logs['eval_step'], 5),
-                    round(self.evaluate_logs['precision'], 5), round(
+                    round(self.evaluate_logs['accuracy'], 5), round(
                         self.evaluate_logs['recall'], 5),
                     round(self.evaluate_logs['f1'], 5))
                 logs.write(content)
@@ -266,7 +266,7 @@ class Task(SequenceClassificationTask):
         self.evaluate_logs['y_pred'] = []
 
         self.evaluate_logs['f1'] = 0
-        self.evaluate_logs['precision'] = 0
+        self.evaluate_logs['accuracy'] = 0
         self.evaluate_logs['recall'] = 0
 
     def _on_evaluate_step_end(self, inputs, outputs, **kwargs):
@@ -297,15 +297,15 @@ class Task(SequenceClassificationTask):
             id2cat = self.id2cat
 
         if is_evaluate_print:
-            f1, precision, recall = metrics(
+            f1, accuracy, recall = metrics(
                 self.evaluate_logs['y_true'], self.evaluate_logs['y_pred'])
             self.evaluate_logs['f1'] = f1
-            self.evaluate_logs['precision'] = precision
+            self.evaluate_logs['accuracy'] = accuracy
             self.evaluate_logs['recall'] = recall
-            print('\neval loss: {:.3f}, precision: {:.4f}, recall: {:.4f}, f1_score: {:.5f}\n'.format(
+            print('\neval loss: {:.3f}, accuracy: {:.4f}, recall: {:.4f}, f1_score: {:.5f}\n'.format(
                 self.evaluate_logs['eval_loss'] /
                 self.evaluate_logs['eval_step'],
-                precision, recall, f1))
+                accuracy, recall, f1))
 
     def _on_evaluate_end(self, ckpt=None, **kwargs):
 
