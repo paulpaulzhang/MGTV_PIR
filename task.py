@@ -86,7 +86,7 @@ class Task(SequenceClassificationTask):
 
                 # loss backword
                 loss = self._on_backward(
-                    inputs, outputs, logits, loss, args=args, **kwargs)
+                    inputs, outputs, logits, loss, args=args, epoch=epoch, ** kwargs)
 
                 if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_iterator):
 
@@ -174,10 +174,8 @@ class Task(SequenceClassificationTask):
             self.pgd = PGD(self.module)
         if args.use_awp:
             self.awp = AWP(self.module,
-                           self.optimizer,
                            adv_lr=args.adv_lr,
-                           adv_eps=args.adv_eps,
-                           start_epoch=args.warmup_ratio*args.num_epochs)
+                           adv_eps=args.adv_eps)
 
         self._on_train_begin_record(**kwargs)
 
@@ -207,6 +205,7 @@ class Task(SequenceClassificationTask):
         loss,
         gradient_accumulation_steps=1,
         args=None,
+        epoch=0,
         **kwargs
     ):
 
@@ -238,6 +237,16 @@ class Task(SequenceClassificationTask):
                 _, attck_loss = self._get_train_loss(inputs, logits, **kwargs)
                 attck_loss.backward()
             self.pgd.restore()
+
+        if args.use_awp and epoch > args.warmup_ratio * args.num_epochs:
+            self.awp.save()
+            for i in range(self.awp.adv_step):
+                self.awp.attack_step()
+                logits = self.module(**inputs)
+                _, adv_loss = self._get_train_loss(inputs, logits, **kwargs)
+                # self.optimizer.zero_grad()
+                adv_loss.backward()
+            self.awp.restore()
 
         self._on_backward_record(loss, **kwargs)
 

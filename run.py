@@ -453,7 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stopping', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=0)
 
-    parser.add_argument('--use_fgm', action='store_true', default=True)
+    parser.add_argument('--use_fgm', action='store_true', default=False)
     parser.add_argument('--use_pgd', action='store_true', default=False)
     parser.add_argument('--use_awp', action='store_true', default=False)
     parser.add_argument('--ema_decay', type=float, default=0.999)
@@ -463,8 +463,8 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.3)
     parser.add_argument('--epsilon', type=float, default=1.0)
     parser.add_argument('--emb_name', type=str, default='word_embeddings.')
-    parser.add_argument('--adv_lr', type=int, default=3)  # TODO
-    parser.add_argument('--adv_eps', type=int, default=3)  # TODO
+    parser.add_argument('--adv_lr', type=int, default=1)  # TODO
+    parser.add_argument('--adv_eps', type=int, default=0.001)  # TODO
 
     parser.add_argument('--fold', type=int, default=5)
     parser.add_argument('--extend_save_path', type=str,

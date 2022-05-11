@@ -236,41 +236,20 @@ class AWP:
     def __init__(
         self,
         model,
-        optimizer,
         adv_param="weight",
         adv_lr=1,
         adv_eps=0.2,
-        start_epoch=0,
         adv_step=1,
     ):
         self.model = model
-        self.optimizer = optimizer
         self.adv_param = adv_param
         self.adv_lr = adv_lr
         self.adv_eps = adv_eps
-        self.start_epoch = start_epoch
         self.adv_step = adv_step
         self.backup = {}
         self.backup_eps = {}
 
-    # TODO
-    def attack_backward(self, x, y, attention_mask, epoch):
-        if (self.adv_lr == 0) or (epoch < self.start_epoch):
-            return None
-
-        self._save()
-        for i in range(self.adv_step):
-            self._attack_step()
-
-            adv_loss, tr_logits = self.model(
-                input_ids=x, attention_mask=attention_mask, labels=y)
-            adv_loss = adv_loss.mean()
-            self.optimizer.zero_grad()
-            adv_loss.backward()
-
-        self._restore()
-
-    def _attack_step(self):
+    def attack_step(self):
         e = 1e-6
         for name, param in self.model.named_parameters():
             if param.requires_grad and param.grad is not None and self.adv_param in name:
@@ -285,7 +264,7 @@ class AWP:
                     )
                 # param.data.clamp_(*self.backup_eps[name])
 
-    def _save(self):
+    def save(self):
         for name, param in self.model.named_parameters():
             if param.requires_grad and param.grad is not None and self.adv_param in name:
                 if name not in self.backup:
@@ -296,7 +275,7 @@ class AWP:
                         self.backup[name] + grad_eps,
                     )
 
-    def _restore(self,):
+    def restore(self,):
         for name, param in self.model.named_parameters():
             if name in self.backup:
                 param.data = self.backup[name]
