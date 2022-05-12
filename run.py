@@ -482,7 +482,7 @@ if __name__ == '__main__':
     seed_everything(args.seed)
 
     for k, v in vars(args).items():
-        print(f'{k}: {v}' + '\n')
+        print(f'{k}: {v}')
 
     if args.do_predict:
         predict(args)

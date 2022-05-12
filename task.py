@@ -244,7 +244,6 @@ class Task(SequenceClassificationTask):
                 self.awp.attack_step()
                 logits = self.module(**inputs)
                 _, adv_loss = self._get_train_loss(inputs, logits, **kwargs)
-                # self.optimizer.zero_grad()
                 adv_loss.backward()
             self.awp.restore()
 
