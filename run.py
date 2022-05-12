@@ -463,8 +463,8 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.3)
     parser.add_argument('--epsilon', type=float, default=1.0)
     parser.add_argument('--emb_name', type=str, default='word_embeddings.')
-    parser.add_argument('--adv_lr', type=int, default=1)  # TODO
-    parser.add_argument('--adv_eps', type=int, default=0.001)  # TODO
+    parser.add_argument('--adv_lr', type=int, default=1)
+    parser.add_argument('--adv_eps', type=int, default=0.001)
 
     parser.add_argument('--fold', type=int, default=5)
     parser.add_argument('--extend_save_path', type=str,
@@ -481,7 +481,8 @@ if __name__ == '__main__':
 
     seed_everything(args.seed)
 
-    print(args)
+    for k, v in vars(args).items():
+        print(f'{k}: {v}' + '\n')
 
     if args.do_predict:
         predict(args)
