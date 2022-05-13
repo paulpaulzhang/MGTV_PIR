@@ -445,7 +445,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=2e-5)
     parser.add_argument('--lstm_lr', type=float, default=1e-2)
     parser.add_argument('--clf_lr', type=float, default=2e-4)
-    parser.add_argument('--weight_decay', type=float, default=1e-3)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
 
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=16)
