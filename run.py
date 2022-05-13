@@ -33,10 +33,10 @@ def build_model_and_tokenizer(args, num_labels, is_train=True):
     if is_train:
         bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertBiLSTMForSequenceClassification(config, bert)
+        dl_module = BertEnsambleForSequenceClassification(config, bert)
     else:
         bert = NeZhaModel(config=config)
-        dl_module = BertBiLSTMForSequenceClassification(config, bert)
+        dl_module = BertEnsambleForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 

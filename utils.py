@@ -329,11 +329,11 @@ def get_default_bert_optimizer(
 
     for name, param in model_param:
         space = name.split('.')
-        if space[0] == 'bert':
+        if 'bert' in space[0]:
             bert_param_optimizer.append((name, param))
-        elif space[0] == 'bilstm':
+        elif 'bilstm' in space[0]:
             lstm_param_optimizer.append((name, param))
-        elif space[0] == 'classifier':
+        elif 'classifier' in space[0]:
             classifier_param_optimizer.append((name, param))
 
     optimizer_grouped_parameters = [
