@@ -1,4 +1,3 @@
-from email.policy import strict
 from pathlib import Path
 import numpy as np
 from torch.utils.data import DataLoader
@@ -33,10 +32,10 @@ def build_model_and_tokenizer(args, num_labels, is_train=True):
     if is_train:
         bert = NeZhaModel.from_pretrained(
             args.model_name_or_path, config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertBiLSTMForSequenceClassification(config, bert)
     else:
         bert = NeZhaModel(config=config)
-        dl_module = BertEnsambleForSequenceClassification(config, bert)
+        dl_module = BertBiLSTMForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
 
@@ -278,21 +277,15 @@ def predict_vote(args):
         pin_memory=True,
         num_workers=args.num_workers)
 
-    args.checkpoint = os.path.join(args.checkpoint, args.model_type)
-    model_type = args.model_type
+    os.makedirs(os.path.join(args.save_path, args.model_type), exist_ok=True)
+    paths = [str(p) for p in list(
+        Path(args.cv_model_path).glob('**/best_model.pth'))]
 
-    args.save_path = os.path.join(args.save_path, model_type)
-    os.makedirs(args.save_path, exist_ok=True)
-
-    for fold in range(args.fold):
+    for fold, path in enumerate(paths):
         print(f'========== {fold + 1} ==========')
-        args.model_type = f'{model_type}-{fold + 1}'
-        args.predict_model = os.path.join(
-            args.checkpoint, args.model_type, 'best_model.pth')
-
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(args.predict_model), strict=False)
+        model.load_state_dict(torch.load(path), strict=False)
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -317,7 +310,7 @@ def predict_vote(args):
         test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
         test_data_df['label'] = test_data_df['label'].astype('int')
         test_data_df.to_csv(os.path.join(
-            args.save_path, f'{model_type}-{fold + 1}.csv'), index=None)
+            args.save_path, args.model_type, f'results_{fold + 1}.csv'), index=None)
 
 
 def predict_merge(args):
@@ -349,22 +342,17 @@ def predict_merge(args):
         pin_memory=True,
         num_workers=args.num_workers)
 
-    args.checkpoint = os.path.join(args.checkpoint, args.model_type)
-    model_type = args.model_type
-
     os.makedirs(args.save_path, exist_ok=True)
+    paths = [str(p) for p in list(
+        Path(args.cv_model_path).glob('**/best_model.pth'))]
 
     y_preds = np.zeros((len(test_dataset), len(test_dataset.cat2id)))
 
-    for fold in range(args.fold):
+    for fold, path in enumerate(paths):
         print(f'========== {fold + 1} ==========')
-        args.model_type = f'{model_type}-{fold + 1}'
-        args.predict_model = os.path.join(
-            args.checkpoint, args.model_type, 'best_model.pth')
-
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(args.predict_model), strict=False)
+        model.load_state_dict(torch.load(path), strict=False)
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -381,7 +369,7 @@ def predict_merge(args):
                     torch.device(args.device))
 
                 outputs = model(**inputs)
-                y_pred.append(outputs.cpu().numpy())
+                y_pred.append(outputs[0].cpu().numpy())
         y_pred = np.vstack(y_pred)
         y_preds += y_pred / args.fold
 
@@ -456,6 +444,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_fgm', action='store_true', default=False)
     parser.add_argument('--use_pgd', action='store_true', default=False)
     parser.add_argument('--use_awp', action='store_true', default=False)
+    parser.add_argument('--use_rdrop', action='store_true', default=False)
+    parser.add_argument('--use_simcse', action='store_true', default=False)
     parser.add_argument('--ema_decay', type=float, default=0.999)
     parser.add_argument('--warmup_ratio', type=float, default=0.1)
 

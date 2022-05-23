@@ -3,13 +3,14 @@ import math
 import os
 import warnings
 from ark_nlp.factory.task.base._sequence_classification import SequenceClassificationTask
-from utils import FGM, PGD, AWP
+from utils import AWP, FGM, PGD, compute_kl_loss
 from torch.utils.data import DataLoader
 from ark_nlp.factory.optimizer import get_optimizer
 import torch
 from utils import Logs
 from tqdm import tqdm
 from utils import metrics
+from torch.nn import functional as F
 
 
 class Task(SequenceClassificationTask):
@@ -67,12 +68,12 @@ class Task(SequenceClassificationTask):
             f"|{'epoch':^15}|{'loss':^15}|{'accuracy':^15}|{'recall':^15}|{'f1':^15}|\n")
         early_stopping = args.early_stopping
 
-        for epoch in range(1, epochs+1):
+        for epoch in range(0, epochs):
 
             self._on_epoch_begin(**kwargs)
 
             train_iterator = tqdm(
-                train_generator, desc=f'Epoch : {epoch}', total=len(train_generator))
+                train_generator, desc=f'Epoch : {epoch + 1}', total=len(train_generator))
 
             for step, inputs in enumerate(train_iterator):
 
@@ -82,16 +83,17 @@ class Task(SequenceClassificationTask):
                 inputs = self._get_module_inputs_on_train(inputs, **kwargs)
 
                 outputs = self.module(**inputs)
-                logits, loss = self._get_train_loss(inputs, outputs, **kwargs)
+                logits, loss = self._get_train_loss(
+                    inputs, outputs, args=args, epoch=epoch, **kwargs)
 
                 # loss backword
                 loss = self._on_backward(
-                    inputs, outputs, logits, loss, args=args, epoch=epoch, ** kwargs)
+                    inputs, outputs, outputs[0], loss, args=args, epoch=epoch, ** kwargs)
 
                 if (step + 1) % gradient_accumulation_steps == 0 or (step + 1) == len(train_iterator):
 
                     # optimize
-                    self._on_optimize(inputs, outputs, logits,
+                    self._on_optimize(inputs, outputs[0], logits,
                                       loss, grad_clip=10, ** kwargs)
 
                     train_iterator.set_postfix_str(
@@ -218,14 +220,14 @@ class Task(SequenceClassificationTask):
 
         loss.backward()
 
-        if args.use_fgm and epoch > args.warmup_ratio * args.num_epochs:
+        if args.use_fgm and epoch >= args.warmup_ratio * args.num_epochs:
             self.fgm.attack(epsilon=args.epsilon, emb_name=args.emb_name)
             logits = self.module(**inputs)
             _, attck_loss = self._get_train_loss(inputs, logits, **kwargs)
             attck_loss.backward()
             self.fgm.restore()
 
-        if args.use_pgd and epoch > args.warmup_ratio * args.num_epochs:
+        if args.use_pgd and epoch >= args.warmup_ratio * args.num_epochs:
             self.pgd.backup_grad()
             for t in range(args.adv_k):
                 self.pgd.attack(is_first_attack=(t == 0))
@@ -238,7 +240,7 @@ class Task(SequenceClassificationTask):
                 attck_loss.backward()
             self.pgd.restore()
 
-        if args.use_awp and epoch > args.warmup_ratio * args.num_epochs:
+        if args.use_awp and epoch >= args.warmup_ratio * args.num_epochs:
             self.awp.save()
             for i in range(self.awp.adv_step):
                 self.awp.attack_step()
@@ -249,6 +251,72 @@ class Task(SequenceClassificationTask):
 
         self._on_backward_record(loss, **kwargs)
 
+        return loss
+
+    def _get_train_loss(
+        self,
+        inputs,
+        outputs,
+        **kwargs
+    ):
+
+        if type(outputs) == tuple:
+            logits, cls_output = outputs
+        else:
+            logits = outputs
+            # 计算损失
+        loss = self._compute_loss(inputs, outputs, **kwargs)
+
+        self._compute_loss_record(**kwargs)
+
+        return logits, loss
+
+    def _get_evaluate_loss(
+        self,
+        inputs,
+        outputs,
+        verbose=True,
+        **kwargs
+    ):
+
+        if type(outputs) == tuple:
+            logits, cls_output = outputs
+        else:
+            logits = outputs
+            # 计算损失
+        loss = self._compute_loss(inputs, outputs, **kwargs)
+
+        return logits, loss
+
+    def _compute_loss(self, inputs, outputs, verbose=True, args=None, epoch=0, **kwargs):
+        if type(outputs) == tuple:
+            logits, cls_output = outputs
+        else:
+            logits = outputs
+
+        if args is not None and args.use_rdrop and epoch >= args.warmup_ratio * args.num_epochs:
+            logits2, *_ = self.module(**inputs)
+            gpce = 0.5 * (self.loss_function(logits, inputs['label_ids']) +
+                          self.loss_function(logits2, inputs['label_ids']))
+            kl_loss = compute_kl_loss(logits, logits2)
+            alpha = 5
+            loss = gpce + alpha * kl_loss
+        elif args is not None and args.use_simcse and epoch < args.warmup_ratio * args.num_epochs:
+            idxs = torch.arange(0, cls_output.shape[0], device=args.device)
+            y_true = idxs + 1 - idxs % 2 * 2
+            similarities = F.cosine_similarity(
+                cls_output.unsqueeze(1), cls_output.unsqueeze(0), dim=2)
+            # torch自带的快速计算相似度矩阵的方法
+            similarities = similarities - \
+                torch.eye(cls_output.shape[0], device=args.device) * 1e12
+            # 论文中除以 temperature 超参 0.05
+            similarities = similarities * 20
+            simcse_loss = torch.mean(F.cross_entropy(similarities, y_true))
+            gpce = self.loss_function(logits, inputs['label_ids'])
+            beta = 1
+            loss = gpce + beta * simcse_loss
+        else:
+            loss = self.loss_function(logits, inputs['label_ids'])
         return loss
 
     def _on_evaluate_begin_record(self, **kwargs):
