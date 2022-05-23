@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
-from model.model import BertForSequenceClassification, BertEnsambleForSequenceClassification, BertBiLSTMForSequenceClassification
+from model.model import BertForSequenceClassification, BertBiLSTMForSequenceClassification
 from data_process import text_enchance
 import pandas as pd
 import torch

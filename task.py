@@ -304,6 +304,8 @@ class Task(SequenceClassificationTask):
         elif args is not None and args.use_simcse and epoch < args.warmup_ratio * args.num_epochs:
             idxs = torch.arange(0, cls_output.shape[0], device=args.device)
             y_true = idxs + 1 - idxs % 2 * 2
+            if len(y_true) % 2 != 0:
+                y_true[-1] -= 1
             similarities = F.cosine_similarity(
                 cls_output.unsqueeze(1), cls_output.unsqueeze(0), dim=2)
             # torch自带的快速计算相似度矩阵的方法
