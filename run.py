@@ -27,14 +27,14 @@ import warnings
 def build_model_and_tokenizer(args, num_labels, is_train=True):
     tokenizer = BertSpanTokenizer(vocab=args.model_name_or_path,
                                   max_seq_len=args.max_seq_len)
-    config = NeZhaConfig.from_pretrained(args.model_name_or_path,
+    config = BertConfig.from_pretrained(args.model_name_or_path,
                                          num_labels=num_labels)
     if is_train:
-        bert = NeZhaModel.from_pretrained(
+        bert = BertModel.from_pretrained(
             args.model_name_or_path, config=config)
         dl_module = BertBiLSTMForSequenceClassification(config, bert)
     else:
-        bert = NeZhaModel(config=config)
+        bert = BertModel(config=config)
         dl_module = BertBiLSTMForSequenceClassification(config, bert)
     return tokenizer, dl_module
 
@@ -178,7 +178,7 @@ def predict(args):
                 torch.device(args.device))
 
             outputs = model(**inputs)
-            y_pred += torch.argmax(outputs, dim=1).cpu().numpy().tolist()
+            y_pred += torch.argmax(outputs[0], dim=1).cpu().numpy().tolist()
 
     os.makedirs(args.save_path, exist_ok=True)
     test_data_df['label'] = [test_dataset.id2cat[label] for label in y_pred]
@@ -431,7 +431,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_seq_len', type=int, default=64)
 
     parser.add_argument('--lr', type=float, default=2e-5)
-    parser.add_argument('--lstm_lr', type=float, default=1e-2)
+    parser.add_argument('--lstm_lr', type=float, default=2e-4)
     parser.add_argument('--clf_lr', type=float, default=2e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
 

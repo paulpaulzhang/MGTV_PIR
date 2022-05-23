@@ -301,7 +301,7 @@ class Task(SequenceClassificationTask):
             kl_loss = compute_kl_loss(logits, logits2)
             alpha = 5
             loss = gpce + alpha * kl_loss
-        elif args is not None and args.use_simcse and epoch < args.warmup_ratio * args.num_epochs:
+        elif args is not None and args.use_simcse: # and epoch < args.warmup_ratio * args.num_epochs:
             idxs = torch.arange(0, cls_output.shape[0], device=args.device)
             y_true = idxs + 1 - idxs % 2 * 2
             if len(y_true) % 2 != 0:
@@ -312,7 +312,7 @@ class Task(SequenceClassificationTask):
             similarities = similarities - \
                 torch.eye(cls_output.shape[0], device=args.device) * 1e12
             # 论文中除以 temperature 超参 0.05
-            similarities = similarities * 20
+            similarities = similarities * 10
             simcse_loss = torch.mean(F.cross_entropy(similarities, y_true))
             gpce = self.loss_function(logits, inputs['label_ids'])
             beta = 1
