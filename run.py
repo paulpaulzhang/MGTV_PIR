@@ -293,16 +293,16 @@ def predict_vote(args):
         with torch.no_grad():
             for inputs in tqdm(test_generator):
                 inputs['input_ids'] = inputs['input_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['attention_mask'] = inputs['attention_mask'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['token_type_ids'] = inputs['token_type_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
                 inputs['label_ids'] = inputs['label_ids'].to(
-                    torch.device(f'cuda:{args.cuda_device}'))
+                    torch.device(args.device))
 
                 outputs = model(**inputs)
-                y_pred += torch.argmax(outputs, dim=1).cpu().numpy().tolist()
+                y_pred += torch.argmax(outputs[0], dim=1).cpu().numpy().tolist()
 
         os.makedirs(args.save_path, exist_ok=True)
         test_data_df['label'] = [test_dataset.id2cat[label]
@@ -457,6 +457,7 @@ if __name__ == '__main__':
     parser.add_argument('--adv_eps', type=int, default=0.001)
 
     parser.add_argument('--fold', type=int, default=5)
+    parser.add_argument('--cv_model_path', type=str)
     parser.add_argument('--extend_save_path', type=str,
                         default='./extend_data/')
     parser.add_argument('--vote_path', type=str,
