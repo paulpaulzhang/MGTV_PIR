@@ -1,4 +1,4 @@
-from transformers import (AutoModel, AutoModelForMaskedLM,
+from transformers import (AutoModel, AutoModelForMaskedLM, AutoModelForPreTraining,
                           AutoTokenizer, LineByLineTextDataset,
                           DataCollatorForLanguageModeling,
                           Trainer, TrainingArguments)
@@ -24,7 +24,6 @@ model_name = '../pretrain_model/uer_large/'
 model = AutoModelForMaskedLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-
 train_dataset = LineByLineTextDataset(
     tokenizer=tokenizer,
     file_path="../data/pretrain_mlm_data.txt",
@@ -34,9 +33,9 @@ data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
 
 training_args = TrainingArguments(
-    output_dir="./checkpoint/uer_pretrain_model",
+    output_dir="./checkpoint/uer_pretrain_model1",
     overwrite_output_dir=True,
-    num_train_epochs=20,
+    num_train_epochs=40,  # 最佳epoch：40
     per_device_train_batch_size=64,
     per_device_eval_batch_size=64,
     evaluation_strategy='steps',
