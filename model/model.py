@@ -2,20 +2,6 @@ from torch import nn
 import torch
 
 
-class MeanPooling(nn.Module):
-    def __init__(self):
-        super(MeanPooling, self).__init__()
-
-    def forward(self, last_hidden_state, attention_mask):
-        input_mask_expanded = attention_mask.unsqueeze(
-            -1).expand(last_hidden_state.size()).float()
-        sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1)
-        sum_mask = input_mask_expanded.sum(1)
-        sum_mask = torch.clamp(sum_mask, min=1e-9)
-        mean_embeddings = sum_embeddings / sum_mask
-        return mean_embeddings
-
-
 class BertForSequenceClassification(nn.Module):
     def __init__(self, config, bert):
         super().__init__()
@@ -63,7 +49,6 @@ class BertBiLSTMForSequenceClassification(nn.Module):
                               bidirectional=True,
                               dropout=0.1,
                               batch_first=True)
-        self.meanpool = MeanPooling()
 
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -86,10 +71,10 @@ class BertBiLSTMForSequenceClassification(nn.Module):
         sequence_output = outputs[0]
         cls_output = outputs[0][:, 0, :]
 
-        output, (h_n, c_n) = self.bilstm(torch.tanh(sequence_output))
+        output, (h_n, c_n) = self.bilstm(sequence_output)
 
-        pooled_output = self.meanpool(output, attention_mask)
+        pooled_output = output[:, 0]
 
-        logits = self.classifier(torch.tanh(pooled_output))
+        logits = self.classifier(pooled_output)
 
         return (logits, cls_output)

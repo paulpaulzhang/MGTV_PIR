@@ -1,4 +1,3 @@
-from optimizerF1 import MultiF1Optimizer
 from pathlib import Path
 import numpy as np
 from torch.utils.data import DataLoader
@@ -6,18 +5,14 @@ from collections import Counter
 import gc
 import math
 from ark_nlp.dataset.base._sentence_classification_dataset import SentenceClassificationDataset
-from ark_nlp.factory.loss_function.focal_loss import FocalLoss
 from transformers import BertConfig, BertModel
-from ark_nlp.processor.tokenizer.transfomer import SentenceTokenizer
-from model.nezha.configuration_nezha import NeZhaConfig
-from model.nezha.modeling_nezha import NeZhaModel, NeZhaForSequenceClassification
 from tokenizer import BertSpanTokenizer
 from utils import WarmupLinearSchedule, seed_everything, get_default_bert_optimizer
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold
 from task import Task
 from tqdm import tqdm
 from argparse import ArgumentParser
-from model.model import BertForSequenceClassification, BertBiLSTMForSequenceClassification
+from model.model import BertBiLSTMForSequenceClassification
 from data_process import text_enchance
 import pandas as pd
 import torch
@@ -345,17 +340,16 @@ def predict_merge(args):
         num_workers=args.num_workers)
 
     os.makedirs(args.save_path, exist_ok=True)
-
-    y_preds = np.zeros((len(test_dataset), len(test_dataset.cat2id)))
     paths = [str(p) for p in list(
         Path(args.cv_model_path).glob('**/best_model.pth'))]
-    # coefs = get_f1_coef(args)
+
+    y_preds = np.zeros((len(test_dataset), len(test_dataset.cat2id)))
 
     for fold, path in enumerate(paths):
         print(f'========== {fold + 1} ==========')
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(path))
+        model.load_state_dict(torch.load(path), strict=False)
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -382,69 +376,6 @@ def predict_merge(args):
     test_data_df['label'] = test_data_df['label'].astype('int')
     test_data_df.to_csv(os.path.join(
         args.save_path, f'results.csv'), index=None)
-
-
-def get_f1_coef(args):
-    data_df = pd.read_csv(args.data_path)
-    goods_df = pd.read_csv(args.goods_data_path)
-    # extend_df = pd.read_csv('../data/a_dataset/extend_data.csv')
-    data_df = pd.concat([data_df, goods_df])
-    data_df['label'] = data_df['label'].apply(lambda x: str(x))
-
-    data_df['text'] = data_df['text'].apply(lambda x: text_enchance(x))
-    data_df = data_df.drop(data_df[(data_df['text'] == '')].index)
-
-    kfold = StratifiedKFold(
-        n_splits=args.fold, shuffle=True, random_state=args.seed)
-    model_type = args.model_type
-    coefs = []
-    for fold, (train_idx, dev_idx) in enumerate(kfold.split(data_df, data_df['label'])):
-        print(f'========== {fold + 1} ==========')
-        args.model_type = f'{model_type}-{fold + 1}'
-
-        train_data_df, dev_data_df = data_df.iloc[train_idx], data_df.iloc[dev_idx]
-        train_dataset = SentenceClassificationDataset(
-            train_data_df, categories=sorted(train_data_df['label'].unique()))
-        dev_dataset = SentenceClassificationDataset(
-            dev_data_df, categories=train_dataset.categories)
-
-        tokenizer, model = build_model_and_tokenizer(
-            args, len(train_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(
-            os.path.join(args.cv_model_path, args.model_type, 'best_model.pth')))
-        model.to(args.device)
-        dev_dataset.convert_to_ids(tokenizer)
-        dev_dataloader = DataLoader(
-            dev_dataset,
-            batch_size=args.batch_size,
-            pin_memory=True,
-            num_workers=args.num_workers)
-
-        y_pred = []
-        y_true = []
-        with torch.no_grad():
-            for inputs in tqdm(dev_dataloader):
-                inputs['input_ids'] = inputs['input_ids'].to(
-                    torch.device(args.device))
-                inputs['attention_mask'] = inputs['attention_mask'].to(
-                    torch.device(args.device))
-                inputs['token_type_ids'] = inputs['token_type_ids'].to(
-                    torch.device(args.device))
-                inputs['label_ids'] = inputs['label_ids'].to(
-                    torch.device(args.device))
-                outputs = model(**inputs)
-                y_pred.append(outputs[0].cpu().numpy())
-                y_true.append(inputs['label_ids'].cpu().numpy())
-        y_pred = np.vstack(y_pred)
-        y_true = np.concatenate(y_true, 0)
-        thresholder = MultiF1Optimizer(num_classes=len(train_dataset.cat2id))
-        print("原始f1 ", thresholder.calc_score(y_pred, y_true))
-        thresholder.fit(y_pred, y_true)
-        coef = thresholder.coefficients()
-        f1_score = thresholder.calc_score(y_pred, y_true, coef)
-        print(coef, "优化后的f1 分数", f1_score)
-        coefs.append((args.model_type, coef))
-    return coefs
 
 
 def vote(args):
@@ -481,8 +412,8 @@ if __name__ == '__main__':
     parser.add_argument('--goods_data_path', type=str,
                         default='../data/a_dataset/goods_data.csv')
     parser.add_argument('--test_file', type=str,
-                        default='../data/a_dataset/test_a.csv')
-    parser.add_argument('--save_path', type=str, default='./submit')
+                        default='../data/b_dataset/test_b.csv')
+    parser.add_argument('--save_path', type=str, default='./submit_b')
 
     parser.add_argument('--do_predict', action='store_true', default=False)
     parser.add_argument('--do_eval', action='store_true', default=False)
