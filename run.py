@@ -244,72 +244,6 @@ def train_cv(args):
         torch.cuda.empty_cache()
 
 
-def predict_vote(args):
-    train_data_df = pd.read_csv(args.data_path)
-    train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
-
-    test_data_df = pd.read_csv(args.test_file)
-    test_data_df['label'] = 1
-    test_data_df['label'] = test_data_df['label'].apply(lambda x: str(x))
-
-    train_data_df['text'] = train_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    train_data_df = train_data_df.drop(
-        train_data_df[(train_data_df['text'] == '')].index)
-    test_data_df['text'] = test_data_df['text'].apply(
-        lambda x: text_enchance(x))
-    test_data_df.loc[(test_data_df['text'] == ''), 'text'] = '比赛占位字符'
-
-    test_dataset = SentenceClassificationDataset(
-        test_data_df, categories=sorted(train_data_df['label'].unique()))
-
-    tokenizer, _ = build_model_and_tokenizer(
-        args, len(test_dataset.cat2id), is_train=False)
-
-    test_dataset.convert_to_ids(tokenizer)
-    test_generator = DataLoader(
-        test_dataset,
-        batch_size=args.batch_size,
-        pin_memory=True,
-        num_workers=args.num_workers)
-
-    os.makedirs(os.path.join(args.save_path, args.model_type), exist_ok=True)
-    paths = [str(p) for p in list(
-        Path(args.cv_model_path).glob('**/best_model.pth'))]
-
-    for fold, path in enumerate(paths):
-        print(f'========== {fold + 1} ==========')
-        _, model = build_model_and_tokenizer(
-            args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(path), strict=False)
-        model.to(torch.device(args.device))
-
-        y_pred = []
-
-        with torch.no_grad():
-            for inputs in tqdm(test_generator):
-                inputs['input_ids'] = inputs['input_ids'].to(
-                    torch.device(args.device))
-                inputs['attention_mask'] = inputs['attention_mask'].to(
-                    torch.device(args.device))
-                inputs['token_type_ids'] = inputs['token_type_ids'].to(
-                    torch.device(args.device))
-                inputs['label_ids'] = inputs['label_ids'].to(
-                    torch.device(args.device))
-
-                outputs = model(**inputs)
-                y_pred += torch.argmax(outputs[0],
-                                       dim=1).cpu().numpy().tolist()
-
-        os.makedirs(args.save_path, exist_ok=True)
-        test_data_df['label'] = [test_dataset.id2cat[label]
-                                 for label in y_pred]
-        test_data_df.loc[(test_data_df['text'] == '比赛占位字符'), 'label'] = 0
-        test_data_df['label'] = test_data_df['label'].astype('int')
-        test_data_df.to_csv(os.path.join(
-            args.save_path, args.model_type, f'results_{fold + 1}.csv'), index=None)
-
-
 def predict_merge(args):
     train_data_df = pd.read_csv(args.data_path)
     train_data_df['label'] = train_data_df['label'].apply(lambda x: str(x))
@@ -349,7 +283,7 @@ def predict_merge(args):
         print(f'========== {fold + 1} ==========')
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(path), strict=False)
+        model.load_state_dict(torch.load(path))
         model.to(torch.device(args.device))
 
         y_pred = []
@@ -401,9 +335,9 @@ if __name__ == '__main__':
     parser = ArgumentParser()
 
     parser.add_argument('--model_type', type=str,
-                        default='nezha_cn_base')
+                        default='uer')
     parser.add_argument('--model_name_or_path', type=str,
-                        default='../pretrain_model/uer_large/')
+                        default='./checkpoint/uer_pretrain_model_40/')
 
     parser.add_argument('--checkpoint', type=str,
                         default='./checkpoint')
@@ -418,8 +352,6 @@ if __name__ == '__main__':
     parser.add_argument('--do_predict', action='store_true', default=False)
     parser.add_argument('--do_eval', action='store_true', default=False)
     parser.add_argument('--do_train_cv', action='store_true', default=False)
-    parser.add_argument('--do_predict_vote',
-                        action='store_true', default=False)
     parser.add_argument('--do_predict_merge',
                         action='store_true', default=False)
     parser.add_argument('--do_vote', action='store_true', default=False)
@@ -455,10 +387,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--fold', type=int, default=5)
     parser.add_argument('--cv_model_path', type=str)
-    parser.add_argument('--extend_save_path', type=str,
-                        default='./extend_data/')
     parser.add_argument('--vote_path', type=str,
-                        default='./submit/')
+                        default='./vote/')
 
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=42)
@@ -478,8 +408,6 @@ if __name__ == '__main__':
         evaluate(args)
     elif args.do_train_cv:
         train_cv(args)
-    elif args.do_predict_vote:
-        predict_vote(args)
     elif args.do_predict_merge:
         predict_merge(args)
     elif args.do_vote:
