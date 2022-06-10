@@ -337,7 +337,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', type=str,
                         default='uer')
     parser.add_argument('--model_name_or_path', type=str,
-                        default='./checkpoint/uer_pretrain_model_40/')
+                        default='./checkpoint/uer_pretrain_model/')
 
     parser.add_argument('--checkpoint', type=str,
                         default='./checkpoint')
