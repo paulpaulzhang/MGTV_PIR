@@ -283,7 +283,7 @@ def predict_merge(args):
         print(f'========== {fold + 1} ==========')
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(path))
+        model.load_state_dict(torch.load(path, map_location='cpu'))
         model.to(torch.device(args.device))
 
         y_pred = []
