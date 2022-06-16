@@ -274,8 +274,9 @@ def predict_merge(args):
         num_workers=args.num_workers)
 
     os.makedirs(args.save_path, exist_ok=True)
-    paths = [str(p) for p in list(
-        Path(args.cv_model_path).glob('**/best_model.pth'))]
+    paths = sorted([str(p) for p in list(
+        Path(args.cv_model_path).glob('**/best_model.pth'))])
+    print(paths)
 
     y_preds = np.zeros((len(test_dataset), len(test_dataset.cat2id)))
 
@@ -283,12 +284,13 @@ def predict_merge(args):
         print(f'========== {fold + 1} ==========')
         _, model = build_model_and_tokenizer(
             args, len(test_dataset.cat2id), is_train=False)
-        model.load_state_dict(torch.load(path, map_location='cpu'))
+        model.load_state_dict(torch.load(path))
         model.to(torch.device(args.device))
 
         y_pred = []
 
         with torch.no_grad():
+            model.eval()
             for inputs in tqdm(test_generator):
                 inputs['input_ids'] = inputs['input_ids'].to(
                     torch.device(args.device))
@@ -347,7 +349,7 @@ if __name__ == '__main__':
                         default='../data/a_dataset/goods_data.csv')
     parser.add_argument('--test_file', type=str,
                         default='../data/b_dataset/test_b.csv')
-    parser.add_argument('--save_path', type=str, default='./submit_b')
+    parser.add_argument('--save_path', type=str, default='./submit')
 
     parser.add_argument('--do_predict', action='store_true', default=False)
     parser.add_argument('--do_eval', action='store_true', default=False)
