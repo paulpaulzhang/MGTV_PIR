@@ -1,27 +1,6 @@
 # MGTV_PIR
 ## 第三届“马栏山杯”国际音视频算法大赛>邀请赛>商品意图识别
-## A榜top8 B榜top2
-### 文件说明
-
-- run.py: 代码主入口，包含训练，推理，融合等
-  
-- pretrain.py,pretrain2.py: 预训练代码
-  
-- data_process.py: 数据处理代码，只是用了clean_url与text_enhence
-  
-- task.py:训练过程代码
-  
-- tokenizer.py: 分词器代码
-  
-- utils.py:常用工具集合
-  
-- model/model.py:模型结构代码
-  
-- model/nezha:未使用
-  
-- datasets.py: 未使用
-  
-
+## A榜top8 B榜top2  总队伍310
 #### 1.数据清洗
 
     在比赛初期通过观察训练集数据发现数据包含很多“？！”等特殊符号，经过测试发现剔除此类符号能够提升预测精度，因此对此类符号进行剔除。
